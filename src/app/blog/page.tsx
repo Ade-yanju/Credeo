@@ -246,7 +246,7 @@ export default function BlogPage() {
       {/* Footer */}
       <footer className="border-t border-white/[0.06] py-10 px-6 md:px-12">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-vodium-cream/30">
-          <span>© 2026 Vodium. Lagos, Nigeria.</span>
+          <span className="text-center md:text-left">© 2026 Vodium. Lagos, Nigeria.<br />Vodium Ledger is operated by VODIUMX TECHNOLOGIES LTD (RC: 8976921).</span>
           <div className="flex gap-6">
             <Link
               href="/privacy"

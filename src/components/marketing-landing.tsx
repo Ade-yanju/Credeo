@@ -947,7 +947,7 @@ export default function LandingPage() {
 
           <div className="brand-divider mb-8" />
           <div className="flex flex-col md:flex-row justify-between gap-4 text-vodium-cream/30 text-xs">
-            <p>© 2026 Vodium. Lagos, Nigeria. All rights reserved.</p>
+            <p>© 2026 Vodium. Lagos, Nigeria. All rights reserved.<br />Vodium Ledger is operated by VODIUMX TECHNOLOGIES LTD (RC: 8976921).</p>
             {/* <p>hello@vodiumledger.com</p> */}
           </div>
         </div>

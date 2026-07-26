@@ -80,7 +80,7 @@ export default function TermsPage() {
           </p>
           <p>
             These Terms constitute a binding agreement between you (&quot;Vendor&quot;,
-            &quot;you&quot;) and Vodium Technology Limited (&quot;Vodium&quot;, &quot;we&quot;, &quot;us&quot;), a
+            &quot;you&quot;) and VODIUMX TECHNOLOGIES LTD (RC: 8976921) (&quot;Vodium&quot;, &quot;we&quot;, &quot;us&quot;), a
             company incorporated in Nigeria.
           </p>
         </Section>
@@ -318,13 +318,13 @@ export default function TermsPage() {
               hello@vodiumledger.com
             </a>
             <br />
-            Vodium Technology Limited, Lagos, Nigeria
+            VODIUMX TECHNOLOGIES LTD (RC: 8976921), Lagos, Nigeria
           </p>
         </Section>
 
         <div className="brand-divider mt-12 mb-8" />
         <p className="text-vodium-black/30 text-xs text-center">
-          © 2026 Vodium Technology Limited · Lagos, Nigeria · All rights
+          © 2026 VODIUMX TECHNOLOGIES LTD (RC: 8976921) · Lagos, Nigeria · All rights
           reserved
         </p>
       </main>

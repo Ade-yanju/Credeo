@@ -75,7 +75,7 @@ export default function PrivacyPage() {
 
         <Section title="Who we are">
           <p>
-            Vodium Ledger is operated by Vodium Technology Limited (&quot;Vodium&quot;,
+            Vodium Ledger is operated by VODIUMX TECHNOLOGIES LTD (RC: 8976921) (&quot;Vodium&quot;,
             &quot;we&quot;, &quot;us&quot;), a Nigerian company building credit intelligence
             infrastructure for campus vendors. This policy explains how we
             handle personal data collected through our web platform at{" "}
@@ -351,7 +351,7 @@ export default function PrivacyPage() {
 
         <Section title="Contact">
           <p>
-            Vodium Technology Limited
+            VODIUMX TECHNOLOGIES LTD (RC: 8976921)
             <br />
             Lagos, Nigeria
             <br />
@@ -375,7 +375,7 @@ export default function PrivacyPage() {
 
         <div className="brand-divider mt-12 mb-8" />
         <p className="text-vodium-black/30 text-xs text-center">
-          © 2026 Vodium Technology Limited · Lagos, Nigeria · All rights
+          © 2026 VODIUMX TECHNOLOGIES LTD (RC: 8976921) · Lagos, Nigeria · All rights
           reserved
         </p>
       </main>
