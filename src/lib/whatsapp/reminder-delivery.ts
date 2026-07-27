@@ -42,6 +42,13 @@ const TEMPLATE_UNUSABLE_CODES = new Set([132000, 132001, 132005, 132012, 132015,
 /** One creation attempt per warm instance — Meta treats repeats as duplicates anyway. */
 let provisionAttempted = false;
 
+/**
+ * When the template is known-unusable (missing or pending approval), skip the
+ * doomed API call for a while instead of failing once per customer per run.
+ */
+let templateUnusableUntil = 0;
+const TEMPLATE_RECHECK_MS = 10 * 60 * 1000;
+
 export function resolveReminderTemplateName(): string {
   const configured = process.env.WHATSAPP_REMINDER_TEMPLATE_NAME;
   if (!configured) return DEFAULT_REMINDER_TEMPLATE;
@@ -91,6 +98,10 @@ export async function sendCustomerReminder(input: {
 
   const template = resolveReminderTemplateName();
   const firstName = customerName.trim().split(/\s+/)[0] || customerName;
+  if (Date.now() < templateUnusableUntil) {
+    await sendRich();
+    return { channel: "freetext-fallback" };
+  }
   try {
     await sendWhatsAppTemplate(
       phone,
@@ -111,12 +122,20 @@ export async function sendCustomerReminder(input: {
         provisionAttempted = true;
         try {
           const r = await ensureReminderTemplate({ name: template });
-          if (r.created) console.log(`[reminder] auto-created template "${template}" (${r.status}) — used once Meta approves`);
-          else if (r.detail) console.warn(`[reminder] auto-create failed: ${r.detail}`);
+          if (r.created) {
+            console.log(`[reminder] auto-created template "${template}" (${r.status}) — used once Meta approves`);
+          } else if (r.status) {
+            // Exists but Meta still 132001s it → almost certainly PENDING
+            // review (Meta uses the same error for unapproved templates).
+            console.log(`[reminder] template "${template}" exists with status ${r.status} — sends switch over once APPROVED`);
+          } else if (r.detail) {
+            console.warn(`[reminder] auto-create failed: ${r.detail}`);
+          }
         } catch (provisionErr) {
           console.warn("[reminder] auto-create threw:", provisionErr);
         }
       }
+      templateUnusableUntil = Date.now() + TEMPLATE_RECHECK_MS;
       await sendRich();
       return { channel: "freetext-fallback" };
     }
