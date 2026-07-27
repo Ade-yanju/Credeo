@@ -913,7 +913,11 @@ export function parseDueDuration(input: string): number | null {
 }
 
 export function reminderLeadMinutesForDue(dueInMinutes: number): number {
-  if (dueInMinutes <= 10) return 1;
+  // Floor at 6 minutes (one 5-minute cron interval + slack): a lead SHORTER
+  // than the cron gap can fall entirely between two ticks, in which case the
+  // credit goes straight to OVERDUE without its pre-due nudge ever sending.
+  // For credits shorter than that floor, the window opens immediately.
+  if (dueInMinutes <= 10) return Math.min(dueInMinutes, 6);
   if (dueInMinutes <= 30) return 10;
   if (dueInMinutes <= 120) return 30;
   if (dueInMinutes <= 1440) return 120;

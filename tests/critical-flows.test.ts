@@ -319,6 +319,18 @@ test("INVARIANT a credit inside its window is always reminder-due", () => {
   for (const window of [1, 30, 120, 1440, 10080, 43200]) {
     assert.ok(reminderLeadMinutesForDue(window) > 0, `lead time collapsed to 0 for a ${window}-minute credit`);
   }
+
+  // A lead shorter than the 5-minute cron gap can fall entirely between two
+  // ticks — the credit would go straight to OVERDUE with no pre-due nudge.
+  // Every window ≥ 6 minutes must therefore open its reminder window at least
+  // one cron interval before due; shorter ones open immediately.
+  for (const window of [6, 8, 10]) {
+    assert.ok(
+      reminderLeadMinutesForDue(window) >= 6,
+      `a ${window}-minute credit's reminder window is narrower than the cron interval`,
+    );
+  }
+  assert.equal(reminderLeadMinutesForDue(3), 3, "ultra-short credits must open their window immediately");
 });
 
 /**
