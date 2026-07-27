@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/session";
-import { listOtpTemplates, ensureOtpTemplate } from "@/lib/whatsapp/otp-template";
+import { listOtpTemplates, ensureOtpTemplate, ensureReminderTemplate } from "@/lib/whatsapp/otp-template";
+import { resolveReminderTemplateName } from "@/lib/whatsapp/reminder-delivery";
 
 export const dynamic = "force-dynamic";
 
@@ -31,5 +32,11 @@ export async function POST() {
     console.error("[admin/otp-template] setup failed:", result.detail);
     return NextResponse.json({ error: result.detail, ...result }, { status: 502 });
   }
-  return NextResponse.json(result);
+
+  // One click sets up BOTH templates: the OTP (authentication) one and the
+  // payment-reminder (utility) one that reaches out-of-session customers.
+  const reminder = await ensureReminderTemplate({ name: resolveReminderTemplateName() });
+  if (reminder.detail) console.error("[admin/otp-template] reminder template:", reminder.detail);
+
+  return NextResponse.json({ ...result, reminder });
 }

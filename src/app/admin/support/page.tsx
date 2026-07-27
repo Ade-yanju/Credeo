@@ -11,6 +11,7 @@ import {
   Loader2,
   ExternalLink,
   RefreshCw,
+  BellRing,
 } from "lucide-react";
 
 interface VendorRow {
@@ -56,6 +57,37 @@ export default function SupportPage() {
     withOverdue: 0,
     newThisWeek: 0,
   });
+
+  const [blasting, setBlasting] = useState(false);
+  const [blastResult, setBlastResult] = useState<string | null>(null);
+
+  // Customer care's manual lever: re-send WhatsApp reminders to every overdue
+  // customer right now, ignoring the 3-day repeat interval.
+  const blastReminders = async () => {
+    if (blasting) return;
+    if (!window.confirm("Send a WhatsApp reminder to EVERY customer with an overdue credit now?")) return;
+    setBlasting(true);
+    setBlastResult(null);
+    try {
+      const res = await fetch("/api/admin/blast-reminders", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        setBlastResult(data.error ?? "Blast failed — try again shortly.");
+      } else {
+        setBlastResult(
+          `Sent ${data.sent} reminder${data.sent === 1 ? "" : "s"}` +
+          (data.failed ? `, ${data.failed} failed` : "") +
+          (data.skipped ? `, ${data.skipped} skipped (vendor opted out)` : "") +
+          (data.sent === 0 && !data.failed ? " — no overdue customers to remind" : "") + ".",
+        );
+      }
+    } catch {
+      setBlastResult("Network error — the blast may not have gone out.");
+    } finally {
+      setBlasting(false);
+      setTimeout(() => setBlastResult(null), 12000);
+    }
+  };
 
   const loadVendors = useCallback(async () => {
     setLoading(true);
@@ -114,13 +146,30 @@ export default function SupportPage() {
             Search and assist vendors across all communities
           </p>
         </div>
-        <button
-          onClick={loadVendors}
-          className="text-vodium-cream/30 hover:text-vodium-cream/70 transition-colors mt-1"
-        >
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-        </button>
+        <div className="flex items-center gap-3 mt-1">
+          <button
+            onClick={blastReminders}
+            disabled={blasting}
+            className="flex items-center gap-2 rounded-lg bg-vodium-gold/15 border border-vodium-gold/30 text-vodium-gold text-xs font-semibold px-3 py-2 hover:bg-vodium-gold/25 transition disabled:opacity-50"
+            title="Re-send WhatsApp reminders to all overdue customers now"
+          >
+            {blasting ? <Loader2 size={13} className="animate-spin" /> : <BellRing size={13} />}
+            <span className="hidden sm:inline">{blasting ? "Sending…" : "Remind all overdue"}</span>
+          </button>
+          <button
+            onClick={loadVendors}
+            className="text-vodium-cream/30 hover:text-vodium-cream/70 transition-colors"
+          >
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+          </button>
+        </div>
       </div>
+
+      {blastResult && (
+        <div className="rounded-lg px-3 py-2 text-xs bg-vodium-gold/10 border border-vodium-gold/25 text-vodium-gold">
+          {blastResult}
+        </div>
+      )}
 
       {/* Stats strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

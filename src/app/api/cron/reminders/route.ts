@@ -29,9 +29,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppButtons, WhatsAppSendError } from "@/lib/whatsapp/outbound";
+import { WhatsAppSendError } from "@/lib/whatsapp/outbound";
 import { messages, payToBlock } from "@/lib/whatsapp/messages";
 import { isReminderDue } from "@/lib/whatsapp/state-machine";
+import { sendCustomerReminder } from "@/lib/whatsapp/reminder-delivery";
 import { markOverdueCredits, sendOverdueReminders, sendEscalations } from "@/lib/credit-lifecycle";
 import { createReminderPrefResolver } from "@/lib/reminder-prefs";
 import { markOverdueInvoices, sendOverdueInvoiceReminders } from "@/lib/invoice-lifecycle";
@@ -139,10 +140,21 @@ export async function GET(req: NextRequest) {
     try {
       // "I've paid" raises a claim the vendor must confirm — it never marks the
       // credit paid on its own. "Not my credit" opens a dispute for review.
-      await sendWhatsAppButtons(student.phone, body, [
-        { id: "PAID", title: "I've paid ✓" },
-        { id: `DISPUTE_${credit.id}`, title: "Not my credit" },
-      ]);
+      // Delivery is session-aware: customers with no open 24h window get the
+      // approved template instead (free text to them is silently dropped).
+      await sendCustomerReminder({
+        phone: student.phone,
+        customerName: student.fullName,
+        shopName: vendor.businessName,
+        amountOwed: Number(credit.amount) - Number(credit.amountRepaid),
+        dueText: diffMins < 0 ? "now overdue" : `due ${dueTxt}`,
+        richBody: body,
+        buttons: [
+          { id: "PAID", title: "I've paid ✓" },
+          { id: `DISPUTE_${credit.id}`, title: "Not my credit" },
+        ],
+        now,
+      });
 
       // Stamp the credit so we don't remind again.
       await prisma.credit.update({

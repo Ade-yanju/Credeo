@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppMessage, WhatsAppSendError } from "@/lib/whatsapp/outbound";
+import { WhatsAppSendError } from "@/lib/whatsapp/outbound";
+import { sendCustomerReminder } from "@/lib/whatsapp/reminder-delivery";
 import { getOrgChannelCredentials, type ChannelCredentials } from "@/lib/whatsapp/channel-token";
 import { createReminderPrefResolver } from "@/lib/reminder-prefs";
 import { messages, payToBlock } from "@/lib/whatsapp/messages";
@@ -242,17 +243,22 @@ export async function sendOverdueReminders(scope: LifecycleScope & { force?: boo
 
     try {
       const creds = await credsFor(item.vendor.organizationId);
-      await sendWhatsAppMessage(
-        item.student.phone,
-        messages.reminderToCustomer(
+      await sendCustomerReminder({
+        phone: item.student.phone,
+        customerName: item.student.fullName,
+        shopName: item.vendor.businessName,
+        amountOwed: item.totalOwed,
+        dueText,
+        richBody: messages.reminderToCustomer(
           item.student.fullName,
           item.vendor.businessName,
           item.totalOwed,
           dueText,
           payToBlock(item.vendor)
         ),
-        creds ?? undefined
-      );
+        creds: creds ?? undefined,
+        now,
+      });
 
       await prisma.credit.updateMany({
         where: { id: { in: item.creditIds } },
@@ -351,7 +357,15 @@ export async function sendEscalations(scope: LifecycleScope = {}) {
     const body = messages.escalationToCustomer(credit.student.fullName, credit.vendor.businessName, owed, payToBlock(credit.vendor));
 
     try {
-      await sendWhatsAppMessage(credit.student.phone, body);
+      await sendCustomerReminder({
+        phone: credit.student.phone,
+        customerName: credit.student.fullName,
+        shopName: credit.vendor.businessName,
+        amountOwed: owed,
+        dueText: "still unpaid — please settle today",
+        richBody: body,
+        now,
+      });
       await prisma.credit.update({ where: { id: credit.id }, data: { escalatedAt: now } });
       await prisma.notification.create({
         data: {

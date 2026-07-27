@@ -240,3 +240,67 @@ export async function ensureOtpTemplate(): Promise<OtpTemplateStatus & { created
   const refreshed = await listOtpTemplates();
   return { ...refreshed, created: true };
 }
+
+/**
+ * Create the payment-reminder UTILITY template if it doesn't exist. This is
+ * what lets reminders reach customers with NO open 24-hour session — Meta
+ * silently drops free text to them (accepted by the API, never delivered),
+ * which production proved the hard way. UTILITY templates need the same
+ * Business Verification as authentication ones, so once OTP creation works
+ * this does too.
+ */
+export async function ensureReminderTemplate(input: {
+  name: string;
+}): Promise<{ name: string; status?: string; created: boolean; detail?: string }> {
+  const { token, phoneId } = creds();
+  if (!token || !phoneId) {
+    return { name: input.name, created: false, detail: "No WhatsApp credentials configured (dev)." };
+  }
+
+  const current = await listOtpTemplates();
+  if (current.detail && !current.templates.length) {
+    return { name: input.name, created: false, detail: current.detail };
+  }
+  const existing = current.templates.find((t) => t.name === input.name);
+  if (existing) return { name: input.name, status: existing.status, created: false };
+
+  const waba = await getWabaId(token, phoneId);
+  if ("error" in waba) return { name: input.name, created: false, detail: waba.error };
+
+  const res = await fetch(`${GRAPH}/${waba.id}/message_templates`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: input.name,
+      language: "en_US",
+      category: "UTILITY",
+      components: [
+        {
+          type: "BODY",
+          text:
+            "Hi {{1}}, a friendly reminder from {{2}}: {{3}} is outstanding — {{4}}. " +
+            "Reply PAID once you have settled, or reply here if anything looks wrong. " +
+            "Paying on time builds your Vodium credit score.",
+          // Meta requires sample values for every variable at review time.
+          example: { body_text: [["Chidi", "Mama Nkechi Stores", "₦2,500", "due tomorrow"]] },
+        },
+      ],
+    }),
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    id?: string; status?: string;
+    error?: { code?: number; message?: string; error_user_msg?: string; error_subcode?: number };
+  };
+  if (!res.ok) {
+    console.error("[reminder-template] create failed:", res.status, JSON.stringify(json.error ?? json));
+    return {
+      name: input.name,
+      created: false,
+      detail:
+        json.error?.error_subcode === 2388185
+          ? "Meta requires Business Verification before templates can be created — complete it in Security Center first."
+          : json.error?.error_user_msg ?? explainMetaError(res.status, json.error),
+    };
+  }
+  return { name: input.name, status: json.status ?? "PENDING", created: true };
+}
