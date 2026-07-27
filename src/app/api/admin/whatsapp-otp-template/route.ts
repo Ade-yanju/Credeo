@@ -15,7 +15,13 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!CAN_MANAGE.includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  return NextResponse.json(await listOtpTemplates());
+  const status = await listOtpTemplates();
+  const reminderName = resolveReminderTemplateName();
+  const reminderTemplate = status.templates.find((t) => t.name === reminderName);
+  return NextResponse.json({
+    ...status,
+    reminder: { name: reminderName, status: reminderTemplate?.status },
+  });
 }
 
 // POST — create the OTP template if missing. Idempotent: an existing template

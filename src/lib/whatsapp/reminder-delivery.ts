@@ -29,6 +29,7 @@ import {
   type WhatsAppButton,
 } from "@/lib/whatsapp/outbound";
 import { normaliseTemplateName } from "@/lib/otp-delivery";
+import { ensureReminderTemplate } from "@/lib/whatsapp/otp-template";
 
 /** One hour under Meta's 24 so we never race the window's expiry mid-send. */
 const SESSION_OPEN_MS = 23 * 60 * 60 * 1000;
@@ -37,6 +38,9 @@ export const DEFAULT_REMINDER_TEMPLATE = "vodium_payment_reminder";
 
 /** Meta codes meaning "this template can't be used" — fall back, don't give up. */
 const TEMPLATE_UNUSABLE_CODES = new Set([132000, 132001, 132005, 132012, 132015, 132016]);
+
+/** One creation attempt per warm instance — Meta treats repeats as duplicates anyway. */
+let provisionAttempted = false;
 
 export function resolveReminderTemplateName(): string {
   const configured = process.env.WHATSAPP_REMINDER_TEMPLATE_NAME;
@@ -98,9 +102,21 @@ export async function sendCustomerReminder(input: {
   } catch (err) {
     if (err instanceof WhatsAppSendError && err.code !== undefined && TEMPLATE_UNUSABLE_CODES.has(err.code)) {
       console.warn(
-        `[reminder] template "${template}" unusable (Meta ${err.code}) — falling back to free text. ` +
-        `Create it via Admin → Team → "Create OTP template" so out-of-session customers get reminders.`,
+        `[reminder] template "${template}" unusable (Meta ${err.code}) — falling back to free text.`,
       );
+      // Self-provision: a 132001 means the template simply doesn't exist yet.
+      // Create it now (idempotent, once per instance) so the NEXT reminder run
+      // delivers out-of-session — no admin click required.
+      if (err.code === 132001 && !provisionAttempted) {
+        provisionAttempted = true;
+        try {
+          const r = await ensureReminderTemplate({ name: template });
+          if (r.created) console.log(`[reminder] auto-created template "${template}" (${r.status}) — used once Meta approves`);
+          else if (r.detail) console.warn(`[reminder] auto-create failed: ${r.detail}`);
+        } catch (provisionErr) {
+          console.warn("[reminder] auto-create threw:", provisionErr);
+        }
+      }
       await sendRich();
       return { channel: "freetext-fallback" };
     }

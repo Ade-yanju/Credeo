@@ -14,6 +14,7 @@ interface OtpTemplateState {
   configured: boolean;
   resolvedName: string;
   active?: { name: string; status: string; language: string };
+  reminder?: { name: string; status?: string };
   detail?: string;
 }
 
@@ -41,11 +42,17 @@ export function OtpTemplatePanel() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Could not create the template");
       setState(data);
+      const reminderNote = data.reminder?.created
+        ? ` Reminder template "${data.reminder.name}" submitted too.`
+        : data.reminder?.detail
+          ? ` Reminder template: ${data.reminder.detail}`
+          : "";
       setMsg({
         ok: true,
-        text: data.created
-          ? `Template "${data.resolvedName}" submitted — Meta usually approves it within minutes. OTP delivery starts automatically once approved.`
-          : `Template "${data.active?.name}" already exists (${data.active?.status}). Nothing changed.`,
+        text:
+          (data.created
+            ? `Template "${data.resolvedName}" submitted — Meta usually approves it within minutes. OTP delivery starts automatically once approved.`
+            : `Template "${data.active?.name}" already exists (${data.active?.status}).`) + reminderNote,
       });
     } catch (err) {
       setMsg({ ok: false, text: err instanceof Error ? err.message : "Something went wrong" });
@@ -55,6 +62,12 @@ export function OtpTemplatePanel() {
   }
 
   const status = state?.active?.status;
+  const reminderStatus = state?.reminder?.status;
+  const reminderBadge =
+    reminderStatus === "APPROVED" ? { cls: "bg-emerald-500/10 border-emerald-500/25 text-emerald-300", label: "Approved — reminders reach customers even without an open chat" }
+    : reminderStatus === "PENDING" ? { cls: "bg-amber-500/10 border-amber-500/25 text-amber-300", label: "Reminder template pending Meta approval" }
+    : reminderStatus ? { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: `Reminder template: ${reminderStatus}` }
+    : { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: "Reminder template not created — out-of-chat customers miss reminders" };
   const badge =
     status === "APPROVED" ? { cls: "bg-emerald-500/10 border-emerald-500/25 text-emerald-300", label: "Approved — OTP delivery is live" }
     : status === "PENDING" ? { cls: "bg-amber-500/10 border-amber-500/25 text-amber-300", label: "Pending Meta approval (usually minutes)" }
@@ -72,9 +85,14 @@ export function OtpTemplatePanel() {
         messaged the bot. One click creates it; approval is automatic on Meta&rsquo;s side.
       </p>
 
-      <div className={`rounded-lg border px-3 py-2 mb-4 text-xs ${badge.cls}`}>
+      <div className={`rounded-lg border px-3 py-2 mb-2 text-xs ${badge.cls}`}>
         {badge.label}
         {state?.resolvedName ? <span className="opacity-60"> · using &ldquo;{state.resolvedName}&rdquo;</span> : null}
+      </div>
+
+      <div className={`rounded-lg border px-3 py-2 mb-4 text-xs ${reminderBadge.cls}`}>
+        {reminderBadge.label}
+        {state?.reminder?.name ? <span className="opacity-60"> · using &ldquo;{state.reminder.name}&rdquo;</span> : null}
       </div>
 
       {state?.detail && !state.active && state.detail !== msg?.text && (
@@ -103,14 +121,14 @@ export function OtpTemplatePanel() {
         </div>
       )}
 
-      {status !== "APPROVED" && (
+      {(status !== "APPROVED" || reminderStatus !== "APPROVED") && (
         <button
           onClick={create}
           disabled={busy || !state?.configured}
           className="btn-gold inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs disabled:opacity-50"
         >
           {busy ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />}
-          {status === "PENDING" ? "Refresh status" : "Create OTP template"}
+          {status === "PENDING" || reminderStatus === "PENDING" ? "Refresh status" : "Create templates"}
         </button>
       )}
     </div>
