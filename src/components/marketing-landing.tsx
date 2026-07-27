@@ -41,7 +41,7 @@ export default function LandingPage() {
   return (
     <main className="bg-vodium-black text-vodium-cream overflow-x-hidden">
       {/* ── Nav ─────────────────────────────────────────────────────── */}
-      <nav className="fixed top-0 inset-x-0 z-50 glass-dark border-b border-white/[0.06]">
+      <nav className="fixed top-0 inset-x-0 z-50 glass-dark border-b border-white/[0.06] pt-safe px-safe">
         <div className="max-w-6xl mx-auto px-6 md:px-12 flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3">

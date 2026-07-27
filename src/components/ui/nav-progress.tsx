@@ -59,8 +59,9 @@ export function NavProgress() {
 
   return (
     <div
-      className="fixed top-0 left-0 z-[200] h-[2.5px] transition-[width] duration-300 ease-out pointer-events-none"
+      className="fixed left-0 z-[200] h-[2.5px] transition-[width] duration-300 ease-out pointer-events-none"
       style={{
+        top: "env(safe-area-inset-top, 0px)",
         width: `${pct}%`,
         background: "linear-gradient(90deg, #C9A961 0%, #E8C97A 60%, #C9A961 100%)",
         boxShadow: "0 0 10px rgba(201,169,97,0.6), 0 0 4px rgba(201,169,97,0.4)",

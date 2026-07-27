@@ -112,7 +112,8 @@ export default function SettingsPage() {
       {/* Toast notification */}
       {(saved || error) && (
         <div
-          className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-2xl border shadow-xl text-sm font-medium transition-all ${
+          style={{ top: "max(1.5rem, calc(env(safe-area-inset-top) + 0.75rem))" }}
+          className={`fixed left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-2xl border shadow-xl text-sm font-medium transition-all ${
             saved
               ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
               : "bg-rose-500/10 border-rose-500/25 text-rose-400"

@@ -166,7 +166,7 @@ export function AdminShell({ name, role, children }: Props) {
   return (
     <div className="min-h-screen bg-[#0D0D0D] flex">
       {/* ── Desktop sidebar ───────────────────────────────────────────────── */}
-      <aside className="hidden md:flex flex-col bg-[#080808] border-r border-white/[0.05] fixed inset-y-0 left-0 z-30 w-14 xl:w-[220px] transition-all duration-300">
+      <aside className="hidden md:flex flex-col bg-[#080808] border-r border-white/[0.05] fixed inset-y-0 left-0 z-30 w-14 xl:w-[220px] transition-all duration-300 pt-safe pb-safe pl-safe">
         {/* Logo */}
         <div className="h-14 flex items-center justify-center xl:justify-start xl:px-5 border-b border-white/[0.05] flex-shrink-0">
           <div className="w-8 h-8 rounded-xl bg-vodium-charcoal border border-vodium-gold/30 flex items-center justify-center flex-shrink-0 shadow-[0_0_12px_rgba(201,169,97,0.06)]">
@@ -254,7 +254,7 @@ export function AdminShell({ name, role, children }: Props) {
 
       {/* ── Mobile drawer ──────────────────────────────────────────────────── */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-[#080808] flex flex-col border-r border-white/[0.05] md:hidden transition-transform duration-200 ${open ? "translate-x-0" : "-translate-x-full"}`}
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-[#080808] flex flex-col border-r border-white/[0.05] md:hidden transition-transform duration-200 pt-safe pb-safe ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="h-14 px-5 flex items-center justify-between border-b border-white/[0.05]">
           <div className="flex items-center gap-3">
@@ -319,7 +319,7 @@ export function AdminShell({ name, role, children }: Props) {
       {/* ── Main ────────────────────────────────────────────────────────────── */}
       <div className="flex-1 min-w-0 md:ml-14 xl:ml-[220px] flex flex-col min-h-screen transition-all duration-300">
         {/* Sticky header */}
-        <header className="bg-[#0A0A0A]/95 backdrop-blur-xl border-b border-white/[0.05] sticky top-0 z-20 px-5 md:px-6 h-14 flex items-center justify-between">
+        <header className="bg-[#0A0A0A]/95 backdrop-blur-xl border-b border-white/[0.05] sticky top-0 z-20 px-5 md:px-6 min-h-[3.5rem] pt-safe px-safe flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setOpen(true)}

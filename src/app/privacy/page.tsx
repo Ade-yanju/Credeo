@@ -29,7 +29,7 @@ export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-vodium-cream">
       {/* Nav */}
-      <nav className="border-b border-black/[0.06] bg-white/80 backdrop-blur-md sticky top-0 z-20">
+      <nav className="border-b border-black/[0.06] bg-white/80 backdrop-blur-md sticky top-0 z-20 pt-safe px-safe">
         <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 group">
             <div className="w-8 h-8 rounded-full bg-vodium-black border border-vodium-gold/40 flex items-center justify-center">

@@ -76,7 +76,10 @@ export function NpsWidget() {
   if (!visible) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-[340px] bg-vodium-charcoal border border-white/[0.10] rounded-2xl shadow-2xl shadow-black/60 p-5 animate-fade-up">
+    <div
+      className="fixed right-6 z-50 w-[340px] max-w-[calc(100vw-2rem)] bg-vodium-charcoal border border-white/[0.10] rounded-2xl shadow-2xl shadow-black/60 p-5 animate-fade-up"
+      style={{ bottom: "max(1.5rem, calc(env(safe-area-inset-bottom) + 0.75rem))" }}
+    >
       <button
         onClick={dismiss}
         className="absolute top-3.5 right-3.5 text-vodium-cream/30 hover:text-vodium-cream/70 transition-colors"
