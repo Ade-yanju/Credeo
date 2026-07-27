@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 // import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { PwaRegister } from "@/components/pwa-register";
+import { InstallBanner } from "@/components/install-banner";
 
 const inter = { variable: "font-inter" };
 const playfair = { variable: "font-playfair" };
@@ -32,8 +33,13 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
   },
   icons: {
-    icon: "/icon.svg",
-    apple: "/icon.svg",
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+    ],
+    // iOS ignores SVG touch icons — it needs a real PNG or the home-screen
+    // tile falls back to a page screenshot.
+    apple: "/apple-touch-icon.png",
   },
   openGraph: {
     title: "Vodium Ledger",
@@ -59,6 +65,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-vodium-cream text-vodium-black">
         {children}
         <PwaRegister />
+        <InstallBanner />
       </body>
     </html>
   );
