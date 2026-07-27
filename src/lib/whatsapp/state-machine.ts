@@ -125,7 +125,7 @@ const MENU_LIST: BotList = {
   rows: [
     { id: "ADD",       title: "Add credit",      description: "Record a new credit in 15 seconds" },
     { id: "INVOICE",   title: "New invoice",     description: "Create & send an invoice on WhatsApp" },
-    { id: "PAID",      title: "Mark paid",       description: "Record a customer's repayment" },
+    { id: "PAID_CMD",  title: "Mark paid",       description: "Record a customer's repayment" },
     { id: "LIST",      title: "Who's owing",     description: "See all outstanding credits" },
     { id: "SCORE",     title: "Check a score",   description: "A customer's reliability score" },
     { id: "ACCOUNT",   title: "Payment details", description: "Bank details shown on reminders" },

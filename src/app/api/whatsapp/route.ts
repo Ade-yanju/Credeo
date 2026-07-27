@@ -239,8 +239,13 @@ export async function POST(req: NextRequest) {
       }).catch((err) => console.error("[whatsapp] responded-stamp failed:", err));
 
       // Customers replying "PAID" to a reminder raise a claim — the vendor must
-      // confirm before the credit is actually marked paid.
-      const claimHandled = await handleCustomerPaidClaim(fromPhone, messageText, creds);
+      // confirm before the credit is actually marked paid. (CLAIM_PAID is the
+      // reminder button's id — unambiguous even for vendor-debtors.)
+      const claimHandled = await handleCustomerPaidClaim(
+        fromPhone,
+        messageText.trim().toUpperCase() === "CLAIM_PAID" ? "PAID" : messageText,
+        creds
+      );
       if (claimHandled) return NextResponse.json({ ok: true });
 
       // "Not my credit" opens a dispute for customer care to attend to.
@@ -256,6 +261,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // A vendor can also be someone's DEBTOR ("anybody can be a debtor"). From
+    // them, a bare "PAID" is ambiguous: settling their own credit vs marking a
+    // customer of theirs paid. Buttons on reminders carry the unambiguous
+    // CLAIM_PAID id; a typed bare PAID gets a two-button question instead of
+    // silently opening their debtor list (the bug this replaced).
+    let effectiveText = messageText;
+    const upperMsg = messageText.trim().toUpperCase();
+    if (upperMsg === "CLAIM_PAID") {
+      const claimHandled = await handleCustomerPaidClaim(fromPhone, "PAID", creds);
+      if (claimHandled) return NextResponse.json({ ok: true });
+      effectiveText = "PAID"; // no personal debt after all — vendor command
+    } else if (upperMsg === "PAID_CMD") {
+      effectiveText = "PAID"; // explicit "a customer paid me"
+    } else if (upperMsg === "PAID" && session.state === "IDLE") {
+      const ownDebt = await prisma.credit.findFirst({
+        where: { student: { phone: fromPhone }, status: { in: [...OPEN_CREDIT_STATUSES] } },
+        select: { id: true },
+      });
+      if (ownDebt) {
+        await sendWhatsAppButtons(fromPhone, messages.paidWhichRole(), [
+          { id: "CLAIM_PAID", title: "I paid my debt" },
+          { id: "PAID_CMD", title: "Customer paid me" },
+        ], creds);
+        return NextResponse.json({ ok: true });
+      }
+    }
+
     // Run state machine
     const sessionCtx: SessionContext = {
       state:    session.state,
@@ -263,7 +295,7 @@ export async function POST(req: NextRequest) {
       vendorId: vendor?.id,
     };
 
-    const result = step(sessionCtx, { body: messageText, fromPhone });
+    const result = step(sessionCtx, { body: effectiveText, fromPhone });
 
     // Persist updated session
     const mergedContext = { ...sessionCtx.context, ...(result.contextPatch ?? {}) };
@@ -1071,7 +1103,7 @@ async function runSideEffect(
       return {
         replyOverride: messages.listFull(credits.map((c) => ({ customerName: c.student.fullName, amount: Number(c.amount), daysUntilDue: Math.ceil((c.dueDate.getTime() - now) / 86_400_000) }))),
         buttonsOverride: [
-          { id: "PAID",  title: "Mark one paid" },
+          { id: "PAID_CMD",  title: "Mark one paid" },
           { id: "ADD",   title: "Add credit" },
           { id: "SCORE", title: "Check a score" },
         ],

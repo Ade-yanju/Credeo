@@ -329,6 +329,9 @@ export const messages = {
     `This customer has no recorded credits on Vodium.`,
 
   // ── Customer payment claims (vendor must confirm before anything changes) ──
+  paidWhichRole: () =>
+    `You have credit of your own to settle, and you also have customers. What do you mean by *PAID*?`,
+
   claimNoCredit: () =>
     `You have no outstanding credit recorded on Vodium. 🎉\n\n` +
     `If you think this is a mistake, please contact your vendor directly.`,

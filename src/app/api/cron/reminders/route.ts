@@ -150,7 +150,9 @@ export async function GET(req: NextRequest) {
         dueText: diffMins < 0 ? "now overdue" : `due ${dueTxt}`,
         richBody: body,
         buttons: [
-          { id: "PAID", title: "I've paid ✓" },
+          // CLAIM_PAID (not PAID): a debtor who is ALSO a vendor must raise a
+          // payment claim here, not open their own debtor list.
+          { id: "CLAIM_PAID", title: "I've paid ✓" },
           { id: `DISPUTE_${credit.id}`, title: "Not my credit" },
         ],
         now,
