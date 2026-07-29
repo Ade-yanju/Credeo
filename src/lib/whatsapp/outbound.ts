@@ -61,6 +61,40 @@ export function parseMetaErrorCode(body: string): number | undefined {
   }
 }
 
+/**
+ * Mark an inbound message as read AND show the "typing…" indicator in the
+ * customer's chat. Meta keeps the animation up for ~25 seconds or until our
+ * actual reply lands, whichever comes first. Fire-and-forget: a failure here
+ * must never delay or break the real reply.
+ */
+export async function sendTypingIndicator(
+  messageId: string,
+  creds?: { token: string; phoneId: string }
+): Promise<void> {
+  const token   = creds?.token  ?? process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = creds?.phoneId ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneId) return;
+
+  try {
+    const res = await fetch(`https://graph.facebook.com/${META_API_VERSION}/${phoneId}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: messageId,
+        typing_indicator: { type: "text" },
+      }),
+    });
+    if (!res.ok) {
+      // Log once at debug level — old message ids routinely 400 after redelivery.
+      console.log(`[WhatsApp typing] ${res.status} for message ${messageId}`);
+    }
+  } catch {
+    /* never let a cosmetic call surface an error */
+  }
+}
+
 export async function sendWhatsAppMessage(
   to: string,
   body: string,

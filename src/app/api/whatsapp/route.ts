@@ -21,7 +21,7 @@ import { formatNaira, normalisePhone } from "../../../lib/utils";
 import { getOrCreateCustomerForVendor, roundMoney } from "../../../lib/bnpl";
 import { signInvoiceToken } from "../../../lib/bnpl-token";
 import { messages } from "../../../lib/whatsapp/messages";
-import { sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppMessage, type WhatsAppButton } from "../../../lib/whatsapp/outbound";
+import { sendTypingIndicator, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppMessage, type WhatsAppButton } from "../../../lib/whatsapp/outbound";
 import { getOrgChannelCredentials } from "../../../lib/whatsapp/channel-token";
 import { contactPhoneFrom } from "../../../lib/whatsapp/contact";
 import { parseCommunity } from "../../../lib/community";
@@ -220,6 +220,10 @@ export async function POST(req: NextRequest) {
       }),
     ]);
     const creds = credsRaw ?? undefined;
+
+    // Mark the message read and show "typing…" while we think — the reply
+    // replaces it. Cosmetic, so it must never block or fail the turn.
+    void sendTypingIndicator(message.id, creds);
 
     // Resolve vendor — restrict BOT to registered vendors only. The by-phone
     // lookup above already covers the common case, so only re-query when the
