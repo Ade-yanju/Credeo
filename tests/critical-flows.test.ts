@@ -15,6 +15,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { isValidTemplateName, normaliseTemplateName, resolveConfiguredTemplateName, DEFAULT_OTP_TEMPLATE_NAME } from "../src/lib/otp-delivery";
+import { DEFAULT_INVOICE_TEMPLATE, resolveInvoiceTemplateName } from "../src/lib/whatsapp/invoice-template";
 
 process.env.SESSION_SECRET = "test-session-secret";
 process.env.SECRET_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
@@ -144,6 +145,23 @@ test("INVARIANT natural phrasing, Pidgin and typos reach the right command", () 
   ];
   for (const [input, expected] of natural) {
     assert.equal(detectIntent(input), expected, `"${input}" should reach ${expected}`);
+  }
+});
+
+test("INVARIANT invoice template names are normalised for Meta", () => {
+  const previous = process.env.WHATSAPP_INVOICE_TEMPLATE_NAME;
+  try {
+    delete process.env.WHATSAPP_INVOICE_TEMPLATE_NAME;
+    assert.equal(resolveInvoiceTemplateName(), DEFAULT_INVOICE_TEMPLATE);
+
+    process.env.WHATSAPP_INVOICE_TEMPLATE_NAME = "Vodium Invoice";
+    assert.equal(resolveInvoiceTemplateName(), "vodium_invoice");
+
+    process.env.WHATSAPP_INVOICE_TEMPLATE_NAME = "!!!";
+    assert.equal(resolveInvoiceTemplateName(), DEFAULT_INVOICE_TEMPLATE);
+  } finally {
+    if (previous === undefined) delete process.env.WHATSAPP_INVOICE_TEMPLATE_NAME;
+    else process.env.WHATSAPP_INVOICE_TEMPLATE_NAME = previous;
   }
 });
 

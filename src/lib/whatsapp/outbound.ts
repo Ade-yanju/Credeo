@@ -308,3 +308,90 @@ export async function sendWhatsAppTemplate(
     throw new WhatsAppSendError(`WhatsApp template send failed: ${res.status}`, res.status, parseMetaErrorCode(err));
   }
 }
+
+export async function sendWhatsAppDocument(
+  to: string,
+  link: string,
+  filename: string,
+  caption?: string,
+  creds?: { token: string; phoneId: string }
+): Promise<void> {
+  const token   = creds?.token  ?? process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = creds?.phoneId ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (!token || !phoneId) {
+    console.log(`\n[WhatsApp document → ${to}]\n${filename}\n${link}\n${caption ?? ""}\n`);
+    return;
+  }
+
+  const recipient = to.replace(/^\+/, "").replace(/^whatsapp:/, "");
+
+  const res = await fetch(`https://graph.facebook.com/${META_API_VERSION}/${phoneId}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to: recipient,
+      type: "document",
+      document: {
+        link,
+        filename,
+        ...(caption ? { caption } : {}),
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error(`[WhatsApp document] Meta API error ${res.status}: ${err}`);
+    throw new WhatsAppSendError(`WhatsApp document send failed: ${res.status}`, res.status, parseMetaErrorCode(err));
+  }
+}
+
+export async function sendWhatsAppDocumentTemplate(
+  to: string,
+  templateName: string,
+  documentLink: string,
+  filename: string,
+  bodyParams: string[],
+  opts?: { creds?: { token: string; phoneId: string }; languageCode?: string }
+): Promise<void> {
+  const token   = opts?.creds?.token  ?? process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = opts?.creds?.phoneId ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (!token || !phoneId) {
+    console.log(`\n[WhatsApp document template → ${to}] ${templateName}(${bodyParams.join(", ")})\n${filename}\n${documentLink}\n`);
+    return;
+  }
+
+  const recipient = to.replace(/^\+/, "").replace(/^whatsapp:/, "");
+  const res = await fetch(`https://graph.facebook.com/${META_API_VERSION}/${phoneId}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to: recipient,
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: opts?.languageCode ?? "en_US" },
+        components: [
+          {
+            type: "header",
+            parameters: [{ type: "document", document: { link: documentLink, filename } }],
+          },
+          {
+            type: "body",
+            parameters: bodyParams.map((text) => ({ type: "text", text })),
+          },
+        ],
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error(`[WhatsApp document template] Meta API error ${res.status}: ${err}`);
+    throw new WhatsAppSendError(`WhatsApp document template send failed: ${res.status}`, res.status, parseMetaErrorCode(err));
+  }
+}

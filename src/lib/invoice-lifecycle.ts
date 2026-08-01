@@ -11,11 +11,11 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { sendWhatsAppMessage } from "@/lib/whatsapp/outbound";
 import { getOrgChannelCredentials, type ChannelCredentials } from "@/lib/whatsapp/channel-token";
 import { createReminderPrefResolver } from "@/lib/reminder-prefs";
 import { signInvoiceToken } from "@/lib/bnpl-token";
 import { formatNaira } from "@/lib/utils";
+import { sendCustomerInvoice } from "@/lib/whatsapp/invoice-delivery";
 
 const REMINDER_INTERVAL_MS = 3 * 86_400_000; // re-remind at most every 3 days
 
@@ -80,7 +80,9 @@ export async function sendOverdueInvoiceReminders(scope: Scope = {}) {
     }
 
     const daysLate = Math.max(1, Math.ceil((now.getTime() - invoice.dueDate.getTime()) / 86_400_000));
-    const link = `${appUrl}/invoice/${signInvoiceToken(invoice.id)}`;
+    const token = signInvoiceToken(invoice.id);
+    const link = `${appUrl}/invoice/${token}`;
+    const pdfLink = `${appUrl}/invoice/${token}/pdf`;
     const body =
       `Hi *${invoice.student.fullName}* 👋\n\n` +
       `A gentle reminder from *${invoice.organization.name}*: invoice ${invoice.invoiceNumber} is ` +
@@ -90,7 +92,19 @@ export async function sendOverdueInvoiceReminders(scope: Scope = {}) {
       `If you've already paid, please ignore this message. Thank you! 🙏`;
 
     try {
-      await sendWhatsAppMessage(invoice.student.phone, body, (await credsFor(invoice.organizationId)) ?? undefined);
+      await sendCustomerInvoice({
+        phone: invoice.student.phone,
+        customerName: invoice.student.fullName,
+        shopName: invoice.organization.name,
+        invoiceNumber: invoice.invoiceNumber,
+        total: outstanding,
+        dueDate: invoice.dueDate,
+        link,
+        pdfLink,
+        richBody: body,
+        creds: (await credsFor(invoice.organizationId)) ?? undefined,
+        now,
+      });
       await prisma.invoice.update({
         where: { id: invoice.id },
         data: { overdueReminderSentAt: now },

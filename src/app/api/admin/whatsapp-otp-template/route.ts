@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/session";
-import { listOtpTemplates, ensureOtpTemplate, ensureReminderTemplate } from "@/lib/whatsapp/otp-template";
+import { listOtpTemplates, ensureInvoiceTemplate, ensureOtpTemplate, ensureReminderTemplate } from "@/lib/whatsapp/otp-template";
+import { resolveInvoiceTemplateName } from "@/lib/whatsapp/invoice-template";
 import { resolveReminderTemplateName } from "@/lib/whatsapp/reminder-delivery";
 
 export const dynamic = "force-dynamic";
@@ -18,9 +19,12 @@ export async function GET() {
   const status = await listOtpTemplates();
   const reminderName = resolveReminderTemplateName();
   const reminderTemplate = status.templates.find((t) => t.name === reminderName);
+  const invoiceName = resolveInvoiceTemplateName();
+  const invoiceTemplate = status.templates.find((t) => t.name === invoiceName);
   return NextResponse.json({
     ...status,
     reminder: { name: reminderName, status: reminderTemplate?.status },
+    invoice: { name: invoiceName, status: invoiceTemplate?.status },
   });
 }
 
@@ -43,6 +47,8 @@ export async function POST() {
   // payment-reminder (utility) one that reaches out-of-session customers.
   const reminder = await ensureReminderTemplate({ name: resolveReminderTemplateName() });
   if (reminder.detail) console.error("[admin/otp-template] reminder template:", reminder.detail);
+  const invoice = await ensureInvoiceTemplate({ name: resolveInvoiceTemplateName() });
+  if (invoice.detail) console.error("[admin/otp-template] invoice template:", invoice.detail);
 
-  return NextResponse.json({ ...result, reminder });
+  return NextResponse.json({ ...result, reminder, invoice });
 }

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { hasTenantWriteAccess, requireTenantContext } from "@/lib/tenant-context";
 import { signInvoiceToken } from "@/lib/bnpl-token";
 import { getOrgChannelCredentials } from "@/lib/whatsapp/channel-token";
-import { sendWhatsAppMessage } from "@/lib/whatsapp/outbound";
+import { sendCustomerInvoice } from "@/lib/whatsapp/invoice-delivery";
 import { formatNaira } from "@/lib/utils";
 import { ipFromRequest, writeAudit } from "@/lib/audit";
 
@@ -24,7 +24,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? req.nextUrl.origin;
-  const link = `${appUrl}/invoice/${signInvoiceToken(invoice.id)}`;
+  const token = signInvoiceToken(invoice.id);
+  const link = `${appUrl}/invoice/${token}`;
+  const pdfLink = `${appUrl}/invoice/${token}/pdf`;
   const storeName = ctx.organization?.name ?? ctx.vendor.businessName;
   const due = invoice.dueDate.toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });
 
@@ -40,7 +42,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const creds = await getOrgChannelCredentials(ctx.organizationId);
 
   try {
-    await sendWhatsAppMessage(invoice.student.phone, body, creds ?? undefined);
+    await sendCustomerInvoice({
+      phone: invoice.student.phone,
+      customerName: invoice.student.fullName,
+      shopName: storeName,
+      invoiceNumber: invoice.invoiceNumber,
+      total: Number(invoice.total),
+      dueDate: invoice.dueDate,
+      link,
+      pdfLink,
+      richBody: body,
+      creds: creds ?? undefined,
+    });
   } catch (err) {
     console.error("[invoices/send] WhatsApp send failed:", err);
     return NextResponse.json(

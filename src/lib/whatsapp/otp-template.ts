@@ -304,3 +304,78 @@ export async function ensureReminderTemplate(input: {
   }
   return { name: input.name, status: json.status ?? "PENDING", created: true };
 }
+
+/**
+ * Create the customer invoice UTILITY template if it doesn't exist. This lets
+ * vendor-generated invoices reach customers even when they have not messaged
+ * the bot in the last 24 hours.
+ */
+export async function ensureInvoiceTemplate(input: {
+  name: string;
+}): Promise<{ name: string; status?: string; created: boolean; detail?: string }> {
+  const { token, phoneId } = creds();
+  if (!token || !phoneId) {
+    return { name: input.name, created: false, detail: "No WhatsApp credentials configured (dev)." };
+  }
+
+  const current = await listOtpTemplates();
+  if (current.detail && !current.templates.length) {
+    return { name: input.name, created: false, detail: current.detail };
+  }
+  const existing = current.templates.find((t) => t.name === input.name);
+  if (existing) return { name: input.name, status: existing.status, created: false };
+
+  const waba = await getWabaId(token, phoneId);
+  if ("error" in waba) return { name: input.name, created: false, detail: waba.error };
+
+  const res = await fetch(`${GRAPH}/${waba.id}/message_templates`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: input.name,
+      language: "en_US",
+      category: "UTILITY",
+      components: [
+        {
+          type: "HEADER",
+          format: "DOCUMENT",
+          example: {
+            header_handle: ["https://vodiumledger.com/invoice/example.pdf"],
+          },
+        },
+        {
+          type: "BODY",
+          text:
+            "Hi {{1}}, {{2}} has sent you invoice {{3}} for {{4}}, due {{5}}. " +
+            "The PDF is attached. You can also view it online here: {{6}}. If you have already paid, please ignore this message.",
+          example: {
+            body_text: [[
+              "Chidi",
+              "Mama Nkechi Stores",
+              "INV-VDM-ABC123",
+              "₦2,500",
+              "12 Aug 2026",
+              "https://vodiumledger.com/invoice/example",
+            ]],
+          },
+        },
+      ],
+    }),
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    id?: string; status?: string;
+    error?: { code?: number; message?: string; error_user_msg?: string; error_subcode?: number };
+  };
+  if (!res.ok) {
+    console.error("[invoice-template] create failed:", res.status, JSON.stringify(json.error ?? json));
+    return {
+      name: input.name,
+      created: false,
+      detail:
+        json.error?.error_subcode === 2388185
+          ? "Meta requires Business Verification before templates can be created — complete it in Security Center first."
+          : json.error?.error_user_msg ?? explainMetaError(res.status, json.error),
+    };
+  }
+  return { name: input.name, status: json.status ?? "PENDING", created: true };
+}

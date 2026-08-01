@@ -5,10 +5,24 @@
       "Read(//usr/bin/**)",
       "Read(//opt/**)",
       "Bash(sed -i 's|wa.me/2348012345678|wa.me/2347019575717|g' /home/oyinlola007/Credeo/src/app/dashboard/page.tsx /home/oyinlola007/Credeo/src/app/dashboard/credit/new/page.tsx)",
-      "Bash(sed -i 's|wa.me/2348000000000|wa.me/2347019575717|g' /home/oyinlola007/Credeo/src/app/whatsapp/page.tsx)"
+      "Bash(sed -i 's|wa.me/2348000000000|wa.me/2347019575717|g' /home/oyinlola007/Credeo/src/app/whatsapp/page.tsx)",
+      "Bash(sed -i 's#rateLimit\\(`admin:login:${ip}`, 5, 900\\)#rateLimit\\(`admin:login:${ip}`, 5, 900, true\\)#' src/app/api/admin/login/route.ts)",
+      "Bash(sed -i 's#rateLimit\\(`rl:login:${email}`, 5, 900\\)#rateLimit\\(`rl:login:${email}`, 5, 900, true\\)#' src/app/api/auth/login/route.ts)",
+      "Bash(sed -i 's#rateLimit\\(`rl:otp-verify:${email}`, 5, 600\\)#rateLimit\\(`rl:otp-verify:${email}`, 5, 600, true\\)#' src/app/api/auth/login/route.ts)",
+      "Bash(sed -i 's#rateLimit\\(`rl:register-otp:${email}`, 3, 600\\)#rateLimit\\(`rl:register-otp:${email}`, 3, 600, true\\)#' src/app/api/vendor/register/route.ts)",
+      "Bash(sed -i 's#rateLimit\\(`rl:register-verify:${email}`, 5, 600\\)#rateLimit\\(`rl:register-verify:${email}`, 5, 600, true\\)#' src/app/api/vendor/register/route.ts)",
+      "Bash(git checkout *)",
+      "Bash(git check-ignore *)",
+      "Bash(git fetch *)",
+      "WebFetch(domain:github.com)",
+      "Skill(artifact-design)",
+      "Skill(artifact-design:*)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "additionalDirectories": [
-      "/home/oyinlola007/Credeo/src/app/api/admin/invite/[token]"
+      "/home/oyinlola007/Credeo/src/app/api/admin/invite/[token]",
+      "/home/oyinlola007/nest-credit-api",
+      "/home/oyinlola007/laravel-credit-api"
     ]
   }
 }

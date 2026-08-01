@@ -22,6 +22,7 @@ import { getOrCreateCustomerForVendor, roundMoney } from "../../../lib/bnpl";
 import { signInvoiceToken } from "../../../lib/bnpl-token";
 import { messages } from "../../../lib/whatsapp/messages";
 import { sendTypingIndicator, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppMessage, type WhatsAppButton } from "../../../lib/whatsapp/outbound";
+import { sendCustomerInvoice } from "../../../lib/whatsapp/invoice-delivery";
 import { getOrgChannelCredentials } from "../../../lib/whatsapp/channel-token";
 import { contactPhoneFrom } from "../../../lib/whatsapp/contact";
 import { parseCommunity } from "../../../lib/community";
@@ -1048,7 +1049,9 @@ async function runSideEffect(
       });
 
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://vodiumledger.com";
-      const link = `${appUrl}/invoice/${signInvoiceToken(invoice.id)}`;
+      const token = signInvoiceToken(invoice.id);
+      const link = `${appUrl}/invoice/${token}`;
+      const pdfLink = `${appUrl}/invoice/${token}/pdf`;
       const storeName = organization.name ?? vendor.businessName;
       const dueText = dueDate.toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });
 
@@ -1063,7 +1066,18 @@ async function runSideEffect(
 
       const orgCreds = await getOrgChannelCredentials(vendor.organizationId);
       try {
-        await sendWhatsAppMessage(customer.phone, customerMessage, orgCreds ?? undefined);
+        await sendCustomerInvoice({
+          phone: customer.phone,
+          customerName: customer.fullName,
+          shopName: storeName,
+          invoiceNumber: invoice.invoiceNumber,
+          total: subtotal,
+          dueDate,
+          link,
+          pdfLink,
+          richBody: customerMessage,
+          creds: orgCreds ?? undefined,
+        });
       } catch (err) {
         console.error("[whatsapp] Invoice delivery failed:", err);
         return { replyOverride: messages.invoiceSendFailed(invoice.invoiceNumber, link), buttonsOverride: [{ id: "INVOICE", title: "New invoice" }, { id: "LIST", title: "Who's owing" }] as WhatsAppButton[] };

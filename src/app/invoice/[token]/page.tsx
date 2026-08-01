@@ -170,7 +170,7 @@ export default async function PublicInvoicePage({ params }: { params: { token: s
           </div>
         </div>
 
-        <InvoiceDownloadButton brand={brand} />
+        <InvoiceDownloadButton brand={brand} pdfPath={`/invoice/${params.token}/pdf`} />
 
         <p className="muted text-center text-[11px] text-vodium-cream/25 mt-5">Powered by Vodium Ledger</p>
       </div>

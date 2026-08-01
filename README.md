@@ -76,12 +76,13 @@ Vodium Ledger gives vendors a 15-second way to log a credit, reminds students au
 - Credit management at `/dashboard/credits` — full credit list with filters
 - Customer list at `/dashboard/customers`
 - Add credit via web at `/dashboard/credit/new`
+- PDF invoices from web and bot flows, sent automatically to the customer on WhatsApp
 - Settings page at `/dashboard/settings`
 
 ### Automated Reminders (cron job)
-- Daily Vercel Cron job at `/api/cron/reminders`
-- Finds every outstanding credit due within 48 hours that hasn't been reminded
-- Sends WhatsApp message to student with amount and vendor name
+- External cron job calls `/api/cron/reminders` every 5 minutes with `Authorization: Bearer <CRON_SECRET>`
+- Finds every outstanding credit whose adaptive reminder window is open
+- Sends WhatsApp reminders through open sessions or approved Meta templates when the customer is out of session
 - Stamps `reminderSentAt` to prevent duplicate sends
 - Respects pending (unregistered) student phone numbers — skips them cleanly
 
@@ -114,7 +115,7 @@ Vodium Ledger gives vendors a 15-second way to log a credit, reminds students au
 ### Infrastructure
 - Sentry error monitoring on server, edge, and client
 - Upstash Redis for OTP storage and rate limiting
-- Vercel cron configured in `vercel.json`
+- External cron calls `/api/cron/reminders` every 5 minutes; daily maintenance lives at `/api/cron/subscriptions`
 - Seed script for dev data at `scripts/seed.ts`
 
 ---
@@ -186,8 +187,8 @@ npm install
 
 # 2. Copy env vars
 cp .env.example .env.local
-# Fill in: DATABASE_URL, DIRECT_URL, TWILIO_*, RESEND_API_KEY,
-#          SENDPULSE_*, PAYSTACK_*, UPSTASH_REDIS_*, SESSION_SECRET
+# Fill in: DATABASE_URL, DIRECT_URL, WHATSAPP_*, RESEND_API_KEY,
+#          PAYSTACK_*, UPSTASH_REDIS_*, SESSION_SECRET
 
 # 3. Set up database
 npx prisma migrate dev --name init
@@ -200,7 +201,7 @@ npm run seed
 npm run dev
 ```
 
-App runs at `http://localhost:3000`. Dev OTP codes print to terminal if Twilio is not configured.
+App runs at `http://localhost:3000`. Dev OTP codes print to terminal if WhatsApp is not configured.
 
 ---
 
@@ -213,11 +214,11 @@ src/
   app/
     api/
       auth/               ← phone + email OTP endpoints
-      whatsapp/           ← WhatsApp webhook (SendPulse)
+      whatsapp/           ← WhatsApp webhook (Meta Cloud API)
       credits/            ← credit CRUD
       repayments/         ← repayment recording
       customers/          ← student/customer API
-      cron/reminders/     ← daily reminder cron job
+      cron/reminders/     ← 5-minute reminder cron endpoint
       paystack/webhook/   ← billing lifecycle events
     dashboard/            ← vendor web UI (protected)
     admin/                ← internal admin panel

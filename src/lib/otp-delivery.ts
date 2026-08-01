@@ -48,6 +48,8 @@ export function normaliseTemplateName(name: string): string | null {
  */
 export const DEFAULT_OTP_TEMPLATE_NAME = "vodium_otp";
 
+let provisionAttempted = false;
+
 /**
  * The template name OTP sends will use: the env override when it's usable
  * (coerced into Meta's format if written loosely, e.g. "Vodium Ledger" →
@@ -102,6 +104,22 @@ export async function sendOtpCode(input: {
               `Create it from Admin → WhatsApp bot → "Create OTP template" (one click), ` +
               `or set WHATSAPP_OTP_TEMPLATE_NAME to an existing template's exact name.`,
             );
+            if (!provisionAttempted) {
+              provisionAttempted = true;
+              try {
+                const { ensureOtpTemplate } = await import("@/lib/whatsapp/otp-template");
+                const result = await ensureOtpTemplate();
+                if (result.created) {
+                  console.log(`[otp] auto-created template "${result.resolvedName}" — used once Meta approves`);
+                } else if (result.active?.status) {
+                  console.log(`[otp] template "${result.resolvedName}" exists with status ${result.active.status}`);
+                } else if (result.detail) {
+                  console.warn(`[otp] auto-create failed: ${result.detail}`);
+                }
+              } catch (provisionErr) {
+                console.warn("[otp] auto-create threw:", provisionErr);
+              }
+            }
             break;
           }
         }
