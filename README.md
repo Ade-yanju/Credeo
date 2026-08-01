@@ -79,6 +79,12 @@ Vodium Ledger gives vendors a 15-second way to log a credit, reminds students au
 - PDF invoices from web and bot flows, sent automatically to the customer on WhatsApp
 - Settings page at `/dashboard/settings`
 
+### WhatsApp Templates
+- `vodium_otp` is required for first-time debtor verification codes
+- `vodium_payment_reminder` is required for reminders outside the 24-hour customer chat window
+- `vodium_invoice_pdf` is required for PDF invoice delivery outside the 24-hour customer chat window
+- PDF invoice templates use a Meta `DOCUMENT` header, so auto-create requires `WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE` from an uploaded sample PDF
+
 ### Automated Reminders (cron job)
 - External cron job calls `/api/cron/reminders` every 5 minutes with `Authorization: Bearer <CRON_SECRET>`
 - Finds every outstanding credit whose adaptive reminder window is open

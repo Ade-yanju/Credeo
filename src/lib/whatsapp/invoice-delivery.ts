@@ -49,6 +49,7 @@ export async function sendCustomerInvoice(input: {
   const due = input.dueDate.toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });
 
   if (Date.now() < templateUnusableUntil) {
+    console.warn(`[invoice] template "${template}" recently failed — sending invoice link fallback without PDF attachment.`);
     await sendWhatsAppMessage(input.phone, input.richBody, input.creds);
     return { channel: "freetext-fallback" };
   }
@@ -82,6 +83,9 @@ export async function sendCustomerInvoice(input: {
         }
       }
       templateUnusableUntil = Date.now() + TEMPLATE_RECHECK_MS;
+      console.warn(
+        `[invoice] PDF attachment will only reach out-of-session customers after template "${template}" is APPROVED in Meta.`,
+      );
       await sendWhatsAppMessage(input.phone, input.richBody, input.creds);
       return { channel: "freetext-fallback" };
     }

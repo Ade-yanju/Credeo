@@ -328,6 +328,17 @@ export async function ensureInvoiceTemplate(input: {
   const waba = await getWabaId(token, phoneId);
   if ("error" in waba) return { name: input.name, created: false, detail: waba.error };
 
+  const headerHandle = process.env.WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE;
+  if (!headerHandle) {
+    return {
+      name: input.name,
+      created: false,
+      detail:
+        `Invoice PDF template "${input.name}" is missing in Meta. Create it manually in WhatsApp Manager, ` +
+        `or set WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE to a Meta-uploaded PDF sample handle before using auto-create.`,
+    };
+  }
+
   const res = await fetch(`${GRAPH}/${waba.id}/message_templates`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -340,7 +351,7 @@ export async function ensureInvoiceTemplate(input: {
           type: "HEADER",
           format: "DOCUMENT",
           example: {
-            header_handle: ["https://vodiumledger.com/invoice/example.pdf"],
+            header_handle: [headerHandle],
           },
         },
         {

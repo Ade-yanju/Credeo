@@ -15,6 +15,7 @@ interface OtpTemplateState {
   resolvedName: string;
   active?: { name: string; status: string; language: string };
   reminder?: { name: string; status?: string };
+  invoice?: { name: string; status?: string; detail?: string };
   detail?: string;
 }
 
@@ -47,12 +48,17 @@ export function OtpTemplatePanel() {
         : data.reminder?.detail
           ? ` Reminder template: ${data.reminder.detail}`
           : "";
+      const invoiceNote = data.invoice?.created
+        ? ` Invoice PDF template "${data.invoice.name}" submitted too.`
+        : data.invoice?.detail
+          ? ` Invoice PDF template: ${data.invoice.detail}`
+          : "";
       setMsg({
         ok: true,
         text:
           (data.created
             ? `Template "${data.resolvedName}" submitted — Meta usually approves it within minutes. OTP delivery starts automatically once approved.`
-            : `Template "${data.active?.name}" already exists (${data.active?.status}).`) + reminderNote,
+            : `Template "${data.active?.name}" already exists (${data.active?.status}).`) + reminderNote + invoiceNote,
       });
     } catch (err) {
       setMsg({ ok: false, text: err instanceof Error ? err.message : "Something went wrong" });
@@ -63,6 +69,7 @@ export function OtpTemplatePanel() {
 
   const status = state?.active?.status;
   const reminderStatus = state?.reminder?.status;
+  const invoiceStatus = state?.invoice?.status;
   const reminderBadge =
     reminderStatus === "APPROVED" ? { cls: "bg-emerald-500/10 border-emerald-500/25 text-emerald-300", label: "Approved — reminders reach customers even without an open chat" }
     : reminderStatus === "PENDING" ? { cls: "bg-amber-500/10 border-amber-500/25 text-amber-300", label: "Reminder template pending Meta approval" }
@@ -73,16 +80,21 @@ export function OtpTemplatePanel() {
     : status === "PENDING" ? { cls: "bg-amber-500/10 border-amber-500/25 text-amber-300", label: "Pending Meta approval (usually minutes)" }
     : status ? { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: `Status: ${status}` }
     : { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: "Not created — first-time customers can't receive codes" };
+  const invoiceBadge =
+    invoiceStatus === "APPROVED" ? { cls: "bg-emerald-500/10 border-emerald-500/25 text-emerald-300", label: "Approved — invoice PDFs reach customers without an open chat" }
+    : invoiceStatus === "PENDING" ? { cls: "bg-amber-500/10 border-amber-500/25 text-amber-300", label: "Invoice PDF template pending Meta approval" }
+    : invoiceStatus ? { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: `Invoice PDF template: ${invoiceStatus}` }
+    : { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: "Invoice PDF template not created — out-of-chat customers get a link fallback" };
 
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-vodium-charcoal p-5 md:p-6">
       <div className="flex items-center gap-2 mb-1">
         <KeyRound size={16} className="text-vodium-gold" />
-        <h3 className="text-sm font-semibold text-vodium-cream">OTP delivery template</h3>
+        <h3 className="text-sm font-semibold text-vodium-cream">WhatsApp delivery templates</h3>
       </div>
       <p className="text-xs text-vodium-cream/40 mb-4">
-        Meta requires an approved template to deliver verification codes to customers who have never
-        messaged the bot. One click creates it; approval is automatic on Meta&rsquo;s side.
+        Meta requires approved templates to deliver verification codes, reminders, and invoice PDFs
+        to customers who have never messaged the bot.
       </p>
 
       <div className={`rounded-lg border px-3 py-2 mb-2 text-xs ${badge.cls}`}>
@@ -94,6 +106,18 @@ export function OtpTemplatePanel() {
         {reminderBadge.label}
         {state?.reminder?.name ? <span className="opacity-60"> · using &ldquo;{state.reminder.name}&rdquo;</span> : null}
       </div>
+
+      <div className={`rounded-lg border px-3 py-2 mb-4 text-xs ${invoiceBadge.cls}`}>
+        {invoiceBadge.label}
+        {state?.invoice?.name ? <span className="opacity-60"> · using &ldquo;{state.invoice.name}&rdquo;</span> : null}
+      </div>
+
+      {state?.invoice?.detail && (
+        <div className="flex items-start gap-2 rounded-lg px-3 py-2 mb-3 text-xs bg-amber-500/10 border border-amber-500/20 text-amber-300">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <span>{state.invoice.detail}</span>
+        </div>
+      )}
 
       {state?.detail && !state.active && state.detail !== msg?.text && (
         <div className="flex items-start gap-2 rounded-lg px-3 py-2 mb-3 text-xs bg-rose-500/10 border border-rose-500/20 text-rose-300">
@@ -121,14 +145,14 @@ export function OtpTemplatePanel() {
         </div>
       )}
 
-      {(status !== "APPROVED" || reminderStatus !== "APPROVED") && (
+      {(status !== "APPROVED" || reminderStatus !== "APPROVED" || invoiceStatus !== "APPROVED") && (
         <button
           onClick={create}
           disabled={busy || !state?.configured}
           className="btn-gold inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs disabled:opacity-50"
         >
           {busy ? <Loader2 size={13} className="animate-spin" /> : <KeyRound size={13} />}
-          {status === "PENDING" || reminderStatus === "PENDING" ? "Refresh status" : "Create templates"}
+          {status === "PENDING" || reminderStatus === "PENDING" || invoiceStatus === "PENDING" ? "Refresh status" : "Create templates"}
         </button>
       )}
     </div>

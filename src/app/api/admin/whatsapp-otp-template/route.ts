@@ -21,10 +21,13 @@ export async function GET() {
   const reminderTemplate = status.templates.find((t) => t.name === reminderName);
   const invoiceName = resolveInvoiceTemplateName();
   const invoiceTemplate = status.templates.find((t) => t.name === invoiceName);
+  const invoiceDetail = invoiceTemplate
+    ? undefined
+    : "Create this DOCUMENT template in Meta, or set WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE from an uploaded sample PDF and click Create templates.";
   return NextResponse.json({
     ...status,
     reminder: { name: reminderName, status: reminderTemplate?.status },
-    invoice: { name: invoiceName, status: invoiceTemplate?.status },
+    invoice: { name: invoiceName, status: invoiceTemplate?.status, detail: invoiceDetail },
   });
 }
 
