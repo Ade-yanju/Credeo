@@ -77,9 +77,22 @@ interface MetaWebhook {
         metadata: { display_phone_number: string; phone_number_id: string };
         contacts?: Array<{ profile: { name: string }; wa_id: string }>;
         messages?: MetaTextMessage[];
-        statuses?: unknown[];
+        statuses?: MetaMessageStatus[];
       };
     }>;
+  }>;
+}
+
+interface MetaMessageStatus {
+  id: string;
+  status: "sent" | "delivered" | "read" | "failed" | string;
+  timestamp?: string;
+  recipient_id?: string;
+  errors?: Array<{
+    code?: number;
+    title?: string;
+    message?: string;
+    error_data?: { details?: string };
   }>;
 }
 
@@ -148,6 +161,10 @@ export async function POST(req: NextRequest) {
   const value   = change?.value;
   const message = value?.messages?.[0];
   const phoneNumberId = value?.metadata?.phone_number_id;
+
+  if (value?.statuses?.length) {
+    logDeliveryStatuses(value.statuses, phoneNumberId);
+  }
 
   // Text messages carry a body; button taps arrive as "interactive" replies whose
   // id we treat exactly like typed text (e.g. tapping [Add credit] sends "ADD").
@@ -408,6 +425,28 @@ async function isDuplicateMessage(messageId: string | undefined): Promise<boolea
   } catch (err) {
     console.error("[whatsapp] dedup check failed (processing anyway):", err);
     return false;
+  }
+}
+
+function logDeliveryStatuses(statuses: MetaMessageStatus[], phoneNumberId?: string) {
+  for (const status of statuses) {
+    const recipient = status.recipient_id ? `+${status.recipient_id}` : "unknown-recipient";
+    const base = `[whatsapp/status] ${status.status} message=${status.id} to=${recipient} phoneNumberId=${phoneNumberId ?? "unknown"}`;
+
+    if (status.status === "failed" || status.errors?.length) {
+      const details = status.errors?.map((err) => {
+        const parts = [
+          err.code ? `code=${err.code}` : null,
+          err.title,
+          err.message,
+          err.error_data?.details,
+        ].filter(Boolean);
+        return parts.join(" | ");
+      }).join("; ") || "No error details";
+      console.error(`${base} error=${details}`);
+    } else {
+      console.log(base);
+    }
   }
 }
 
@@ -1066,7 +1105,7 @@ async function runSideEffect(
 
       const orgCreds = await getOrgChannelCredentials(vendor.organizationId);
       try {
-        await sendCustomerInvoice({
+        const delivery = await sendCustomerInvoice({
           phone: customer.phone,
           customerName: customer.fullName,
           shopName: storeName,
@@ -1078,6 +1117,7 @@ async function runSideEffect(
           richBody: customerMessage,
           creds: orgCreds ?? undefined,
         });
+        console.log(`[whatsapp] invoice=${invoice.invoiceNumber} to=${customer.phone} channel=${delivery.channel}`);
       } catch (err) {
         console.error("[whatsapp] Invoice delivery failed:", err);
         return { replyOverride: messages.invoiceSendFailed(invoice.invoiceNumber, link), buttonsOverride: [{ id: "INVOICE", title: "New invoice" }, { id: "LIST", title: "Who's owing" }] as WhatsAppButton[] };

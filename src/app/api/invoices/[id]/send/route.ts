@@ -42,7 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const creds = await getOrgChannelCredentials(ctx.organizationId);
 
   try {
-    await sendCustomerInvoice({
+    const delivery = await sendCustomerInvoice({
       phone: invoice.student.phone,
       customerName: invoice.student.fullName,
       shopName: storeName,
@@ -54,6 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       richBody: body,
       creds: creds ?? undefined,
     });
+    console.log(`[invoices/send] invoice=${invoice.invoiceNumber} to=${invoice.student.phone} channel=${delivery.channel}`);
   } catch (err) {
     console.error("[invoices/send] WhatsApp send failed:", err);
     return NextResponse.json(

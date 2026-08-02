@@ -92,7 +92,7 @@ export async function sendOverdueInvoiceReminders(scope: Scope = {}) {
       `If you've already paid, please ignore this message. Thank you! 🙏`;
 
     try {
-      await sendCustomerInvoice({
+      const delivery = await sendCustomerInvoice({
         phone: invoice.student.phone,
         customerName: invoice.student.fullName,
         shopName: invoice.organization.name,
@@ -105,6 +105,7 @@ export async function sendOverdueInvoiceReminders(scope: Scope = {}) {
         creds: (await credsFor(invoice.organizationId)) ?? undefined,
         now,
       });
+      console.log(`[invoice-reminders] invoice=${invoice.invoiceNumber} to=${invoice.student.phone} channel=${delivery.channel}`);
       await prisma.invoice.update({
         where: { id: invoice.id },
         data: { overdueReminderSentAt: now },
