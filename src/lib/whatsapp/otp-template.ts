@@ -62,6 +62,10 @@ function explainMetaError(status: number, error?: { code?: number; message?: str
   return error?.message ?? `Meta returned HTTP ${status}.`;
 }
 
+function looksLikeResumableUploadHandle(value: string): boolean {
+  return /^[24]:/.test(value.trim());
+}
+
 /**
  * The WABA that owns the phone number.
  *
@@ -165,23 +169,27 @@ export async function listOtpTemplates(): Promise<OtpTemplateStatus> {
     return { configured: true, resolvedName, templates: [], detail: waba.error };
   }
 
-  const res = await fetch(
-    `${GRAPH}/${waba.id}/message_templates?fields=name,status,language,category&limit=100`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  const json = (await res.json().catch(() => ({}))) as {
-    data?: Array<{ name: string; status: string; language: string; category: string }>;
-    error?: { code?: number; message?: string };
-  };
-  if (!res.ok) {
-    console.error("[otp-template] template list failed:", res.status, JSON.stringify(json.error ?? json));
-    return { configured: true, resolvedName, templates: [], detail: explainMetaError(res.status, json.error) };
+  const templates: OtpTemplateInfo[] = [];
+  let nextUrl: string | undefined = `${GRAPH}/${waba.id}/message_templates?fields=name,status,language,category&limit=100`;
+
+  while (nextUrl) {
+    const res = await fetch(nextUrl, { headers: { Authorization: `Bearer ${token}` } });
+    const json = (await res.json().catch(() => ({}))) as {
+      data?: Array<{ name: string; status: string; language: string; category: string }>;
+      paging?: { next?: string };
+      error?: { code?: number; message?: string };
+    };
+    if (!res.ok) {
+      console.error("[otp-template] template list failed:", res.status, JSON.stringify(json.error ?? json));
+      return { configured: true, resolvedName, templates: [], detail: explainMetaError(res.status, json.error) };
+    }
+    templates.push(...(json.data ?? []).map((t) => ({
+      name: t.name, status: t.status, language: t.language, category: t.category,
+    })));
+    nextUrl = json.paging?.next;
   }
 
-  const templates = (json.data ?? []).map((t) => ({
-    name: t.name, status: t.status, language: t.language, category: t.category,
-  }));
-  const active = templates.find((t) => t.name === resolvedName);
+  const active = templates.find((t) => t.name.toLowerCase() === resolvedName.toLowerCase());
   return { configured: true, resolvedName, templates, active };
 }
 
@@ -338,6 +346,16 @@ export async function ensureInvoiceTemplate(input: {
         `or set WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE to a Meta-uploaded PDF sample handle before using auto-create.`,
     };
   }
+  if (!looksLikeResumableUploadHandle(headerHandle)) {
+    return {
+      name: input.name,
+      created: false,
+      detail:
+        "WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE is not a valid Meta resumable-upload handle. " +
+        "Do not use a media ID or public URL here. Upload a sample PDF through Meta's Resumable Upload API " +
+        "and paste the returned `h` value, which usually starts with `2:` or `4:`.",
+    };
+  }
 
   const res = await fetch(`${GRAPH}/${waba.id}/message_templates`, {
     method: "POST",
@@ -383,9 +401,11 @@ export async function ensureInvoiceTemplate(input: {
       name: input.name,
       created: false,
       detail:
-        json.error?.error_subcode === 2388185
-          ? "Meta requires Business Verification before templates can be created — complete it in Security Center first."
-          : json.error?.error_user_msg ?? explainMetaError(res.status, json.error),
+        json.error?.error_subcode === 2494102
+          ? "Meta rejected WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE. Use the `h` value returned by the Resumable Upload API for a PDF sample uploaded with the same Meta app/token, not a media ID, URL, or expired handle."
+          : json.error?.error_subcode === 2388185
+            ? "Meta requires Business Verification before templates can be created — complete it in Security Center first."
+            : json.error?.error_user_msg ?? explainMetaError(res.status, json.error),
     };
   }
   return { name: input.name, status: json.status ?? "PENDING", created: true };

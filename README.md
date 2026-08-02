@@ -83,7 +83,7 @@ Vodium Ledger gives vendors a 15-second way to log a credit, reminds students au
 - `vodium_otp` is required for first-time debtor verification codes
 - `vodium_payment_reminder` is required for reminders outside the 24-hour customer chat window
 - `vodium_invoice_pdf` is required for PDF invoice delivery outside the 24-hour customer chat window
-- PDF invoice templates use a Meta `DOCUMENT` header, so auto-create requires `WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE` from an uploaded sample PDF
+- PDF invoice templates use a Meta `DOCUMENT` header, so auto-create requires `WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE`: the returned `h` value from Meta's Resumable Upload API for a sample PDF, not a public URL or media ID
 
 ### Automated Reminders (cron job)
 - External cron job calls `/api/cron/reminders` every 5 minutes with `Authorization: Bearer <CRON_SECRET>`

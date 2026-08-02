@@ -10,6 +10,13 @@ export const dynamic = "force-dynamic";
 // Meta configuration.
 const CAN_MANAGE = ["SUPER_ADMIN"];
 
+function findTemplate(
+  templates: Array<{ name: string; status: string; language: string; category: string }>,
+  name: string,
+) {
+  return templates.find((template) => template.name.toLowerCase() === name.toLowerCase());
+}
+
 // GET — which template OTP sending will use, and whether it exists/is approved.
 export async function GET() {
   const session = getAdminSession();
@@ -18,9 +25,9 @@ export async function GET() {
 
   const status = await listOtpTemplates();
   const reminderName = resolveReminderTemplateName();
-  const reminderTemplate = status.templates.find((t) => t.name === reminderName);
+  const reminderTemplate = findTemplate(status.templates, reminderName);
   const invoiceName = resolveInvoiceTemplateName();
-  const invoiceTemplate = status.templates.find((t) => t.name === invoiceName);
+  const invoiceTemplate = findTemplate(status.templates, invoiceName);
   const invoiceDetail = invoiceTemplate
     ? undefined
     : "Create this DOCUMENT template in Meta, or set WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE from an uploaded sample PDF and click Create templates.";

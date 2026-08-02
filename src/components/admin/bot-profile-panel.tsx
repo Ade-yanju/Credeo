@@ -19,6 +19,10 @@ interface OtpTemplateState {
   detail?: string;
 }
 
+function isTemplateUsable(status?: string): boolean {
+  return status === "APPROVED" || status === "ACTIVE";
+}
+
 /**
  * One-click setup for the Meta OTP template — without it, verification codes
  * only reach customers who have already messaged the bot (Meta's 24h rule).
@@ -71,17 +75,17 @@ export function OtpTemplatePanel() {
   const reminderStatus = state?.reminder?.status;
   const invoiceStatus = state?.invoice?.status;
   const reminderBadge =
-    reminderStatus === "APPROVED" ? { cls: "bg-emerald-500/10 border-emerald-500/25 text-emerald-300", label: "Approved — reminders reach customers even without an open chat" }
+    isTemplateUsable(reminderStatus) ? { cls: "bg-emerald-500/10 border-emerald-500/25 text-emerald-300", label: "Approved — reminders reach customers even without an open chat" }
     : reminderStatus === "PENDING" ? { cls: "bg-amber-500/10 border-amber-500/25 text-amber-300", label: "Reminder template pending Meta approval" }
     : reminderStatus ? { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: `Reminder template: ${reminderStatus}` }
     : { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: "Reminder template not created — out-of-chat customers miss reminders" };
   const badge =
-    status === "APPROVED" ? { cls: "bg-emerald-500/10 border-emerald-500/25 text-emerald-300", label: "Approved — OTP delivery is live" }
+    isTemplateUsable(status) ? { cls: "bg-emerald-500/10 border-emerald-500/25 text-emerald-300", label: "Approved — OTP delivery is live" }
     : status === "PENDING" ? { cls: "bg-amber-500/10 border-amber-500/25 text-amber-300", label: "Pending Meta approval (usually minutes)" }
     : status ? { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: `Status: ${status}` }
     : { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: "Not created — first-time customers can't receive codes" };
   const invoiceBadge =
-    invoiceStatus === "APPROVED" ? { cls: "bg-emerald-500/10 border-emerald-500/25 text-emerald-300", label: "Approved — invoice PDFs reach customers without an open chat" }
+    isTemplateUsable(invoiceStatus) ? { cls: "bg-emerald-500/10 border-emerald-500/25 text-emerald-300", label: "Approved — invoice PDFs reach customers without an open chat" }
     : invoiceStatus === "PENDING" ? { cls: "bg-amber-500/10 border-amber-500/25 text-amber-300", label: "Invoice PDF template pending Meta approval" }
     : invoiceStatus ? { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: `Invoice PDF template: ${invoiceStatus}` }
     : { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: "Invoice PDF template not created — out-of-chat customers get a link fallback" };
@@ -145,7 +149,7 @@ export function OtpTemplatePanel() {
         </div>
       )}
 
-      {(status !== "APPROVED" || reminderStatus !== "APPROVED" || invoiceStatus !== "APPROVED") && (
+      {(!isTemplateUsable(status) || !isTemplateUsable(reminderStatus) || !isTemplateUsable(invoiceStatus)) && (
         <button
           onClick={create}
           disabled={busy || !state?.configured}
