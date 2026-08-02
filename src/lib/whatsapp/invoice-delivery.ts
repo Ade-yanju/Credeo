@@ -1,11 +1,9 @@
 import { formatNaira } from "@/lib/utils";
 import {
-  sendWhatsAppDocument,
   sendWhatsAppDocumentTemplate,
   sendWhatsAppMessage,
   WhatsAppSendError,
 } from "@/lib/whatsapp/outbound";
-import { hasOpenSession } from "@/lib/whatsapp/reminder-delivery";
 import { ensureInvoiceTemplate } from "@/lib/whatsapp/otp-template";
 import { resolveInvoiceTemplateName } from "@/lib/whatsapp/invoice-template";
 import { invoicePdfFilename } from "@/lib/invoice-pdf";
@@ -16,7 +14,7 @@ const TEMPLATE_RECHECK_MS = 10 * 60 * 1000;
 let provisionAttempted = false;
 let templateUnusableUntil = 0;
 
-export type InvoiceDeliveryChannel = "session" | "template" | "freetext-fallback";
+export type InvoiceDeliveryChannel = "template" | "freetext-fallback";
 
 export async function sendCustomerInvoice(input: {
   phone: string;
@@ -31,19 +29,6 @@ export async function sendCustomerInvoice(input: {
   creds?: { token: string; phoneId: string };
   now?: Date;
 }): Promise<{ channel: InvoiceDeliveryChannel }> {
-  const now = input.now ?? new Date();
-
-  if (await hasOpenSession(input.phone, now)) {
-    await sendWhatsAppDocument(
-      input.phone,
-      input.pdfLink,
-      invoicePdfFilename(input.invoiceNumber),
-      input.richBody,
-      input.creds,
-    );
-    return { channel: "session" };
-  }
-
   const template = resolveInvoiceTemplateName();
   const firstName = input.customerName.trim().split(/\s+/)[0] || input.customerName;
   const due = input.dueDate.toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });

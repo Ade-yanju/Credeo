@@ -65,7 +65,8 @@ export async function GET(_: Request, { params }: { params: { token: string } })
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="${invoicePdfFilename(invoice.invoiceNumber)}"`,
-      "Cache-Control": "private, max-age=300",
+      "Content-Length": String(pdf.length),
+      "Cache-Control": "public, max-age=300",
     },
   });
 }
