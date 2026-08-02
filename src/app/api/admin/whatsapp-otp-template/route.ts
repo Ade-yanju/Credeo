@@ -10,11 +10,32 @@ export const dynamic = "force-dynamic";
 // Meta configuration.
 const CAN_MANAGE = ["SUPER_ADMIN"];
 
+function normalizeTemplateName(name: string) {
+  return name.trim().toLowerCase();
+}
+
 function findTemplate(
   templates: Array<{ name: string; status: string; language: string; category: string }>,
   name: string,
 ) {
-  return templates.find((template) => template.name.toLowerCase() === name.toLowerCase());
+  const target = normalizeTemplateName(name);
+  return templates.find((template) => normalizeTemplateName(template.name) === target);
+}
+
+function invoiceTemplateDetail(
+  templates: Array<{ name: string; status: string; language: string; category: string }>,
+  expectedName: string,
+) {
+  const invoiceLike = templates
+    .filter((template) => normalizeTemplateName(template.name).includes("invoice"))
+    .map((template) => `${template.name} (${template.language}, ${template.status})`)
+    .slice(0, 8);
+
+  if (invoiceLike.length) {
+    return `Could not find "${expectedName}" exactly. Templates visible to this app token that mention invoice: ${invoiceLike.join(", ")}. If your Meta screen shows "${expectedName}", confirm WHATSAPP_ACCESS_TOKEN and WHATSAPP_BUSINESS_ACCOUNT_ID point to that same WhatsApp Business Account.`;
+  }
+
+  return `Could not find "${expectedName}" in the WhatsApp Business Account visible to this app token. If Meta shows it, the deployed WHATSAPP_ACCESS_TOKEN or WHATSAPP_BUSINESS_ACCOUNT_ID is likely connected to a different WABA.`;
 }
 
 // GET — which template OTP sending will use, and whether it exists/is approved.
@@ -30,7 +51,7 @@ export async function GET() {
   const invoiceTemplate = findTemplate(status.templates, invoiceName);
   const invoiceDetail = invoiceTemplate
     ? undefined
-    : "Create this DOCUMENT template in Meta, or set WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE from an uploaded sample PDF and click Create templates.";
+    : invoiceTemplateDetail(status.templates, invoiceName);
   return NextResponse.json({
     ...status,
     reminder: { name: reminderName, status: reminderTemplate?.status },
