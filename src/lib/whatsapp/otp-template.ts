@@ -66,6 +66,26 @@ function looksLikeResumableUploadHandle(value: string): boolean {
   return /^[24]:/.test(value.trim());
 }
 
+function sameTemplateName(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+export function invoiceTemplateVisibilityDetail(
+  templates: Array<{ name: string; status: string; language: string; category: string }>,
+  expectedName: string,
+): string {
+  const invoiceLike = templates
+    .filter((template) => template.name.toLowerCase().includes("invoice"))
+    .map((template) => `${template.name} (${template.language}, ${template.status})`)
+    .slice(0, 8);
+
+  if (invoiceLike.length) {
+    return `Could not find "${expectedName}" exactly. Templates visible to this app token that mention invoice: ${invoiceLike.join(", ")}. If Meta shows "${expectedName}", confirm WHATSAPP_ACCESS_TOKEN and WHATSAPP_BUSINESS_ACCOUNT_ID point to the same WhatsApp Business Account.`;
+  }
+
+  return `Could not find "${expectedName}" in the WhatsApp Business Account visible to this app token. If Meta shows it, the deployed WHATSAPP_ACCESS_TOKEN or WHATSAPP_BUSINESS_ACCOUNT_ID is likely connected to a different WABA.`;
+}
+
 /**
  * The WABA that owns the phone number.
  *
@@ -269,7 +289,7 @@ export async function ensureReminderTemplate(input: {
   if (current.detail && !current.templates.length) {
     return { name: input.name, created: false, detail: current.detail };
   }
-  const existing = current.templates.find((t) => t.name === input.name);
+  const existing = current.templates.find((t) => sameTemplateName(t.name, input.name));
   if (existing) return { name: input.name, status: existing.status, created: false };
 
   const waba = await getWabaId(token, phoneId);
@@ -330,7 +350,7 @@ export async function ensureInvoiceTemplate(input: {
   if (current.detail && !current.templates.length) {
     return { name: input.name, created: false, detail: current.detail };
   }
-  const existing = current.templates.find((t) => t.name === input.name);
+  const existing = current.templates.find((t) => sameTemplateName(t.name, input.name));
   if (existing) return { name: input.name, status: existing.status, created: false };
 
   const waba = await getWabaId(token, phoneId);
@@ -341,9 +361,7 @@ export async function ensureInvoiceTemplate(input: {
     return {
       name: input.name,
       created: false,
-      detail:
-        `Invoice PDF template "${input.name}" is missing in Meta. Create it manually in WhatsApp Manager, ` +
-        `or set WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE to a Meta-uploaded PDF sample handle before using auto-create.`,
+      detail: invoiceTemplateVisibilityDetail(current.templates, input.name),
     };
   }
   if (!looksLikeResumableUploadHandle(headerHandle)) {
