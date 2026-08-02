@@ -13,6 +13,7 @@ interface LiveProfile {
 interface OtpTemplateState {
   configured: boolean;
   resolvedName: string;
+  wabaId?: string;
   active?: { name: string; status: string; language: string };
   reminder?: { name: string; status?: string };
   invoice?: { name: string; status?: string; detail?: string };
@@ -99,6 +100,7 @@ export function OtpTemplatePanel() {
       <p className="text-xs text-vodium-cream/40 mb-4">
         Meta requires approved templates to deliver verification codes, reminders, and invoice PDFs
         to customers who have never messaged the bot.
+        {state?.wabaId ? <span className="block mt-1">Connected WABA: <code className="text-vodium-gold/80">{state.wabaId}</code></span> : null}
       </p>
 
       <div className={`rounded-lg border px-3 py-2 mb-2 text-xs ${badge.cls}`}>

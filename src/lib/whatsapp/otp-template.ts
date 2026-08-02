@@ -29,6 +29,7 @@ export interface OtpTemplateInfo {
 export interface OtpTemplateStatus {
   configured: boolean;        // WhatsApp creds present at all
   resolvedName: string;       // the name OTP sends will actually use
+  wabaId?: string;            // WhatsApp Business Account currently being queried
   templates: OtpTemplateInfo[];
   /** The template OTP sending will use, if it exists on the account. */
   active?: OtpTemplateInfo;
@@ -201,7 +202,7 @@ export async function listOtpTemplates(): Promise<OtpTemplateStatus> {
     };
     if (!res.ok) {
       console.error("[otp-template] template list failed:", res.status, JSON.stringify(json.error ?? json));
-      return { configured: true, resolvedName, templates: [], detail: explainMetaError(res.status, json.error) };
+      return { configured: true, resolvedName, wabaId: waba.id, templates: [], detail: explainMetaError(res.status, json.error) };
     }
     templates.push(...(json.data ?? []).map((t) => ({
       name: t.name, status: t.status, language: t.language, category: t.category,
@@ -210,7 +211,7 @@ export async function listOtpTemplates(): Promise<OtpTemplateStatus> {
   }
 
   const active = templates.find((t) => t.name.toLowerCase() === resolvedName.toLowerCase());
-  return { configured: true, resolvedName, templates, active };
+  return { configured: true, resolvedName, wabaId: waba.id, templates, active };
 }
 
 /**
