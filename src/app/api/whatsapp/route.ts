@@ -23,6 +23,8 @@ import { signInvoiceToken } from "../../../lib/bnpl-token";
 import { messages } from "../../../lib/whatsapp/messages";
 import { sendTypingIndicator, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppMessage, type WhatsAppButton } from "../../../lib/whatsapp/outbound";
 import { sendCustomerInvoice } from "../../../lib/whatsapp/invoice-delivery";
+import { handleIncomingReceipt } from "../../../lib/whatsapp/receipt-intake";
+import { rescueUnknownMessage } from "../../../lib/whatsapp/ai-fallback";
 import { getOrgChannelCredentials } from "../../../lib/whatsapp/channel-token";
 import { contactPhoneFrom } from "../../../lib/whatsapp/contact";
 import { parseCommunity } from "../../../lib/community";
@@ -51,8 +53,17 @@ interface MetaTextMessage {
   from:      string;   // E.164 without "+"
   id:        string;
   timestamp: string;
-  type:      "text" | "interactive" | "contacts" | string;
+  type:      "text" | "interactive" | "contacts" | "image" | string;
   text?:     { body: string };
+  // A photo or screenshot. Meta sends only an id — the bytes are fetched
+  // separately (see lib/whatsapp/media.ts). Customers use this to send bank
+  // transfer receipts, which the bot reads with OCR.
+  image?: {
+    id: string;
+    mime_type?: string;
+    caption?: string;
+    sha256?: string;
+  };
   interactive?: {
     type: string;
     button_reply?: { id: string; title: string };
@@ -171,6 +182,10 @@ export async function POST(req: NextRequest) {
   // A shared contact card becomes its phone number, so at any "what's the
   // number?" step a vendor can pick the debtor from their contacts instead of
   // typing — the phone-parsing steps strip non-digits anyway.
+  //
+  // A customer image is a payment-receipt candidate: the bot reads it (OCR) and
+  // raises a confirm-reject claim for the vendor. Handled before the text gate
+  // below so a receipt is not dropped as "unsupported media".
   const rawText =
     message?.type === "text"
       ? message.text?.body
@@ -178,17 +193,25 @@ export async function POST(req: NextRequest) {
         ? message.interactive?.button_reply?.id ?? message.interactive?.list_reply?.id
         : message?.type === "contacts"
           ? contactPhoneFrom(message.contacts)
-          : undefined;
+          : message?.type === "image"
+            ? message.image?.caption
+            : undefined;
+
+  const isImageMessage = message?.type === "image";
 
   // Silently ack status updates, delivery receipts, unsupported media, etc.
-  if (!message || !rawText?.trim()) {
+  if (!message || (!rawText?.trim() && !isImageMessage)) {
     return NextResponse.json({ ok: true });
   }
 
   const fromPhone   = `+${message.from}`;   // Meta sends without "+", normalise to E.164
-  const messageText = rawText.trim();
+  const messageText = rawText?.trim() ?? "";
 
-  console.log(`[whatsapp] ← ${fromPhone}: "${messageText}"`);
+  console.log(
+    isImageMessage
+      ? `[whatsapp] ← ${fromPhone}: [image ${message.image?.id ?? "?"}]`
+      : `[whatsapp] ← ${fromPhone}: "${messageText}"`,
+  );
 
   // Meta retries a delivery it thinks failed (including when we simply replied
   // slowly), re-sending the SAME message id. Without this guard a retry replays
@@ -243,6 +266,34 @@ export async function POST(req: NextRequest) {
     // replaces it. Cosmetic, so it must never block or fail the turn.
     void sendTypingIndicator(message.id, creds);
 
+    // A photo from someone who owes money is almost always a transfer receipt.
+    // Read it and raise a claim for the vendor to confirm — OCR never marks a
+    // credit paid by itself (see receipt-intake.ts for the safety model).
+    if (isImageMessage && message.image?.id) {
+      const receiptResult = await handleIncomingReceipt({
+        fromPhone,
+        mediaId: message.image.id,
+        mimeType: message.image.mime_type,
+        creds,
+      });
+      console.log(
+        `[whatsapp] receipt from ${fromPhone}: handled=${receiptResult.handled} (${receiptResult.reason ?? "ok"})`,
+      );
+      if (receiptResult.handled) return NextResponse.json({ ok: true });
+
+      // Not a receipt we can act on. Treat any caption as the real message so a
+      // vendor photographing something with a command still gets served.
+      if (!messageText) {
+        await sendWhatsAppMessage(
+          fromPhone,
+          "Thanks for the image. I can only read payment receipts — reply with a command like " +
+            "*ADD*, *LIST* or *HELP* and I'll take it from there.",
+          creds,
+        );
+        return NextResponse.json({ ok: true });
+      }
+    }
+
     // Resolve vendor — restrict BOT to registered vendors only. The by-phone
     // lookup above already covers the common case, so only re-query when the
     // session is linked to a different vendor id.
@@ -289,6 +340,8 @@ export async function POST(req: NextRequest) {
     // CLAIM_PAID id; a typed bare PAID gets a two-button question instead of
     // silently opening their debtor list (the bug this replaced).
     let effectiveText = messageText;
+    /** Set when an AI-rescued message should resume mid-flow rather than at IDLE. */
+    let aiPrefilledState: WhatsAppState | undefined;
     const upperMsg = messageText.trim().toUpperCase();
     if (upperMsg === "CLAIM_PAID") {
       const claimHandled = await handleCustomerPaidClaim(fromPhone, "PAID", creds);
@@ -296,6 +349,20 @@ export async function POST(req: NextRequest) {
       effectiveText = "PAID"; // no personal debt after all — vendor command
     } else if (upperMsg === "PAID_CMD") {
       effectiveText = "PAID"; // explicit "a customer paid me"
+    } else if (upperMsg === "AI_CONFIRM_ADD") {
+      // Vendor tapped "Yes, add it" on an AI-parsed credit. Drop them into the
+      // normal ADD flow as if they had just typed the customer's name at the
+      // "who is this credit for?" step — so the phone number, amount and final
+      // confirmation all still run through the ordinary, well-tested path.
+      // Nothing reaches the ledger without the standard double-check.
+      const sessionContext = (session.context as Record<string, unknown> | null) ?? {};
+      const aiName = String(sessionContext.aiPendingName ?? "").trim();
+      if (aiName) {
+        effectiveText = aiName;
+        aiPrefilledState = "ADDING_CREDIT_STUDENT";
+      } else {
+        effectiveText = "ADD"; // nothing staged (expired session) — start clean
+      }
     } else if (upperMsg === "PAID" && session.state === "IDLE") {
       const ownDebt = await prisma.credit.findFirst({
         where: { student: { phone: fromPhone }, status: { in: [...OPEN_CREDIT_STATUSES] } },
@@ -312,12 +379,50 @@ export async function POST(req: NextRequest) {
 
     // Run state machine
     const sessionCtx: SessionContext = {
-      state:    session.state,
+      state:    aiPrefilledState ?? session.state,
       context:  (session.context as Record<string, unknown>) ?? {},
       vendorId: vendor?.id,
     };
 
     const result = step(sessionCtx, { body: effectiveText, fromPhone });
+
+    // Last-chance AI rescue. The deterministic matcher has already had its full
+    // run (exact → phrase → keyword → typo) and given up, so this can only ever
+    // improve on the "Sorry, I didn't catch that" reply it was about to send.
+    // Vendors write things like "chidi collect 2 bread 500" that no alias table
+    // will cover; the model turns that into a confirmable ADD.
+    if (
+      vendor &&
+      session.state === "IDLE" &&
+      result.nextState === "IDLE" &&
+      result.reply === messages.unknown()
+    ) {
+      try {
+        const rescued = await rescueUnknownMessage({ message: effectiveText, isVendor: true });
+        if (rescued) {
+          // Stage the parsed credit; the AI_CONFIRM_ADD button starts the normal
+          // ADD flow with the name prefilled, so nothing is written to the
+          // ledger without the vendor tapping through the usual confirmation.
+          await prisma.whatsAppSession.update({
+            where: { phone: fromPhone },
+            data: {
+              context: {
+                ...sessionCtx.context,
+                aiPendingName: rescued.pendingCredit?.customerName ?? null,
+                aiPendingAmount: rescued.pendingCredit?.amount ?? null,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              } as any,
+            },
+          });
+          await sendWhatsAppButtons(fromPhone, rescued.reply, rescued.buttons ?? [], creds);
+          return NextResponse.json({ ok: true });
+        }
+      } catch (err) {
+        // An AI hiccup must never break the bot — fall through to the normal
+        // unknown reply the vendor would have got anyway.
+        console.warn("[whatsapp] AI rescue failed:", err instanceof Error ? err.message : err);
+      }
+    }
 
     // Persist updated session
     const mergedContext = { ...sessionCtx.context, ...(result.contextPatch ?? {}) };
@@ -1117,7 +1222,7 @@ async function runSideEffect(
           richBody: customerMessage,
           creds: orgCreds ?? undefined,
         });
-        console.log(`[whatsapp] invoice=${invoice.invoiceNumber} to=${customer.phone} channel=${delivery.channel}`);
+        console.log(`[whatsapp] invoice=${invoice.invoiceNumber} to=${customer.phone} channel=${delivery.channel} delivered=${delivery.delivered}`);
       } catch (err) {
         console.error("[whatsapp] Invoice delivery failed:", err);
         return { replyOverride: messages.invoiceSendFailed(invoice.invoiceNumber, link), buttonsOverride: [{ id: "INVOICE", title: "New invoice" }, { id: "LIST", title: "Who's owing" }] as WhatsAppButton[] };

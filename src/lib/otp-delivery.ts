@@ -5,11 +5,17 @@
  * store's. Vendors need zero Meta setup for storefront OTP to work.
  *
  * Delivery order:
- *   1. WhatsApp OTP *template* from Vodium's number — the reliable path for
- *      first-time customers (Meta requires a template for business-initiated
- *      messages). Configure WHATSAPP_OTP_TEMPLATE_NAME once.
- *   2. Free-text WhatsApp from Vodium's number (works within an open 24h session).
- *   3. Dev fallback: log to server console.
+ *   1. If a 24-hour session is already open, plain WhatsApp text — fastest path,
+ *      no template round-trip, and Meta guarantees delivery inside the window.
+ *   2. WhatsApp OTP *template* from Vodium's number — the ONLY path that reaches
+ *      a number with no open session (i.e. any first-time customer), because
+ *      Meta silently drops business-initiated free text outside the window.
+ *      Configure WHATSAPP_OTP_TEMPLATE_NAME once, or let the admin console
+ *      create it in one click.
+ *   3. Free text as a last resort. Reported as delivered:false because with no
+ *      open session Meta accepts it and then drops it — callers must not claim
+ *      "code sent" on the strength of this.
+ *   4. Dev fallback: log to server console.
  */
 
 import { sendWhatsAppMessage, sendWhatsAppTemplate, WhatsAppSendError } from "@/lib/whatsapp/outbound";
@@ -76,11 +82,29 @@ export async function sendOtpCode(input: {
   phone: string;
   code: string;
   storeName: string;
-}): Promise<{ channel: OtpChannel }> {
+}): Promise<{ channel: OtpChannel; delivered: boolean }> {
   const { phone, code, storeName } = input;
   const hasVodiumWa = process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   if (hasVodiumWa) {
+    const freeText =
+      `${code} is your verification code for your ${storeName} order on Vodium Ledger. ` +
+      `It expires in 10 minutes. Do not share it.`;
+
+    // An OTP is worthless late, so if a 24-hour window is already open we send
+    // the code as free text immediately and skip the template round-trip
+    // entirely. Out of session, only the approved AUTHENTICATION template will
+    // actually be delivered by Meta.
+    const { hasOpenSession } = await import("@/lib/whatsapp/session-window");
+    if (await hasOpenSession(phone)) {
+      try {
+        await sendWhatsAppMessage(phone, freeText);
+        return { channel: "whatsapp", delivered: true };
+      } catch (err) {
+        console.warn("[otp] in-session free-text failed, trying template:", err);
+      }
+    }
+
     // 1) Approved OTP template (the only path that reaches a number with no
     // open 24-hour session — i.e. any first-time customer). Falls back to the
     // platform default name, which the admin console can create in one click.
@@ -93,7 +117,7 @@ export async function sendOtpCode(input: {
       for (const languageCode of langs) {
         try {
           await sendWhatsAppTemplate(phone, templateName, [code], { languageCode, otpButton });
-          return { channel: "whatsapp" };
+          return { channel: "whatsapp", delivered: true };
         } catch (err) {
           console.warn(`[otp] template '${templateName}' (${languageCode}) failed:`, err instanceof Error ? err.message : err);
           // 132001 means the template NAME is unknown to Meta. Trying another
@@ -126,13 +150,16 @@ export async function sendOtpCode(input: {
       }
     }
 
-    // 2) Free-text from the Vodium bot number (delivers within an open session).
+    // 2) Last resort: free text with no open session. Meta accepts this and
+    // then silently drops it, so we report delivered=false — callers must not
+    // tell the customer "code sent" on the strength of this.
     try {
-      await sendWhatsAppMessage(
-        phone,
-        `${code} is your verification code for your ${storeName} order on Vodium Ledger. It expires in 10 minutes. Do not share it.`
+      await sendWhatsAppMessage(phone, freeText);
+      console.warn(
+        `[otp] sent free-text OTP to ${phone} with no open session and no usable template — ` +
+        `Meta will most likely DROP this silently. Approve the OTP template to fix delivery.`,
       );
-      return { channel: "whatsapp" };
+      return { channel: "whatsapp", delivered: false };
     } catch (err) {
       console.warn("[otp] WhatsApp free-text failed:", err);
     }
@@ -144,5 +171,5 @@ export async function sendOtpCode(input: {
   } else {
     console.warn(`[otp] No WhatsApp delivery configured for ${storeName}; code not sent.`);
   }
-  return { channel: "console" };
+  return { channel: "console", delivered: false };
 }

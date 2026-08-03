@@ -185,6 +185,75 @@ Vodium Ledger gives vendors a 15-second way to log a credit, reminds students au
 
 ---
 
+## The WhatsApp 24-Hour Window (read this before debugging delivery)
+
+**The rule.** Meta only delivers a business-initiated message to someone who has
+**not** messaged the bot in the last 24 hours if it is an **approved template**.
+Free text sent outside that window is *accepted* by the API — HTTP 200, real
+message id — and then **silently dropped**. There is no bypass.
+
+**Being a verified business does not change this.** Verification affects your
+display name, your messaging tier, and your *eligibility to create templates*.
+The window itself applies to every business account, forever.
+
+**What that means in practice:** if OTPs, reminders, or invoice PDFs are not
+arriving, the cause is almost always that the relevant template is missing or
+not yet APPROVED — not the code, and not your verification status.
+
+### How this codebase handles it: deliver-then-upgrade
+
+A **delivered template re-opens the 24-hour window.** So rather than treating
+template-vs-rich as either/or, `src/lib/whatsapp/session-window.ts` does both:
+
+| Customer state | What happens |
+| --- | --- |
+| Messaged us in the last 24h | Rich message sent directly (buttons, PDF, bank details) |
+| Out of session | **Template first** (re-opens the window) **→ then the rich message** inside it |
+| Template unusable | Free text, reported as `delivered: false` — it may be dropped |
+
+The last row matters: the code no longer claims success for a send Meta will
+throw away. Logs carry `channel=` and `delivered=` so a cron run tells you what
+actually reached the customer.
+
+### The three templates
+
+| Template | Category | Used for | Extra requirement |
+| --- | --- | --- | --- |
+| `vodium_otp` | AUTHENTICATION | Customer verification codes | Business Verification |
+| `vodium_payment_reminder` | UTILITY | Payment reminders | Business Verification |
+| `vodium_invoice_pdf` | UTILITY | Invoice + PDF attachment | `WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE` |
+
+All three auto-provision on first failure, or from Admin → WhatsApp bot. Check
+status there before assuming a code problem.
+
+**The invoice template needs one extra step.** Its DOCUMENT header requires a
+sample PDF uploaded through Meta's **Resumable Upload API**; set the returned
+`h` value (starts with `2:` or `4:`) as `WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE`.
+A public URL or media ID will not work. Until that is set, invoice PDFs only
+reach customers who are already in session.
+
+---
+
+## AI & OCR
+
+All AI is **optional**. Without `ANTHROPIC_API_KEY` every path returns `null`
+and the app keeps its existing deterministic behaviour.
+
+| Capability | Where | Behaviour |
+| --- | --- | --- |
+| Receipt OCR | `lib/whatsapp/receipt-intake.ts` | Customer photographs a transfer receipt; the bot reads amount/bank/reference and asks the vendor to confirm |
+| Bot understanding | `lib/whatsapp/ai-fallback.ts` | Runs **only** after the deterministic matcher gives up, so it can never regress existing commands |
+| Risk insight | `GET /api/bnpl/orders/[id]/insight` | Advisory only — **cannot** change an approve/decline decision |
+| Reminder copy | `lib/ai.ts` | Per-customer respectful wording (in-session only; out-of-session must use fixed templates) |
+| Vendor digest | `/api/cron/digest` | Weekly ledger summary on WhatsApp |
+
+**Safety model for OCR:** a receipt is a *claim*, never proof. OCR never marks a
+credit paid — it raises the same vendor-confirmation the existing `PAID` flow
+uses, with the details pre-filled. Low-confidence reads and failed-looking
+receipts are not auto-matched.
+
+---
+
 ## Quick Start
 
 ```bash

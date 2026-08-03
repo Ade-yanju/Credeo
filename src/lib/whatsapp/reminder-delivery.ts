@@ -19,25 +19,18 @@
  *     behaviour: delivered in-session, dropped outside — better than nothing)
  */
 
-import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/utils";
 import {
   sendWhatsAppButtons,
   sendWhatsAppMessage,
   sendWhatsAppTemplate,
-  WhatsAppSendError,
   type WhatsAppButton,
 } from "@/lib/whatsapp/outbound";
 import { normaliseTemplateName } from "@/lib/otp-delivery";
 import { ensureReminderTemplate } from "@/lib/whatsapp/otp-template";
-
-/** One hour under Meta's 24 so we never race the window's expiry mid-send. */
-const SESSION_OPEN_MS = 23 * 60 * 60 * 1000;
+import { deliverThenUpgrade, hasOpenSession } from "@/lib/whatsapp/session-window";
 
 export const DEFAULT_REMINDER_TEMPLATE = "vodium_payment_reminder";
-
-/** Meta codes meaning "this template can't be used" — fall back, don't give up. */
-const TEMPLATE_UNUSABLE_CODES = new Set([132000, 132001, 132005, 132012, 132015, 132016]);
 
 /** One creation attempt per warm instance — Meta treats repeats as duplicates anyway. */
 let provisionAttempted = false;
@@ -55,19 +48,24 @@ export function resolveReminderTemplateName(): string {
   return normaliseTemplateName(configured) ?? DEFAULT_REMINDER_TEMPLATE;
 }
 
-export async function hasOpenSession(phone: string, now: Date = new Date()): Promise<boolean> {
-  const session = await prisma.whatsAppSession.findUnique({
-    where: { phone },
-    select: { lastInteractionAt: true },
-  });
-  return Boolean(session && now.getTime() - session.lastInteractionAt.getTime() < SESSION_OPEN_MS);
-}
-
-export type ReminderChannel = "session" | "template" | "freetext-fallback";
+export { hasOpenSession };
 
 /**
- * Send a payment reminder, choosing the channel that will actually deliver.
- * Throws WhatsAppSendError like the raw senders do — callers keep their
+ * "template" is kept for callers that already switch on it — it now means the
+ * template delivered but the rich upgrade did not. "upgraded" is the new happy
+ * path for an out-of-session customer: template opened the window, rich landed.
+ */
+export type ReminderChannel = "session" | "upgraded" | "template" | "freetext-fallback";
+
+/**
+ * Send a payment reminder that actually reaches the customer.
+ *
+ * In-session customers get the rich message directly. Out-of-session customers
+ * get the approved template first — which re-opens the 24-hour window — and then
+ * the rich message with buttons and bank details inside that fresh window. See
+ * session-window.ts for why this beats template-or-nothing.
+ *
+ * Throws WhatsAppSendError like the raw senders do, so callers keep their
  * existing blocked/permanent handling.
  */
 export async function sendCustomerReminder(input: {
@@ -86,32 +84,23 @@ export async function sendCustomerReminder(input: {
   const { phone, customerName, shopName, amountOwed, dueText, richBody, buttons, creds } = input;
   const now = input.now ?? new Date();
 
-  const sendRich = async () => {
-    if (buttons?.length) await sendWhatsAppButtons(phone, richBody, buttons, creds);
-    else await sendWhatsAppMessage(phone, richBody, creds);
-  };
-
-  if (await hasOpenSession(phone, now)) {
-    await sendRich();
-    return { channel: "session" };
-  }
-
   const template = resolveReminderTemplateName();
   const firstName = customerName.trim().split(/\s+/)[0] || customerName;
-  if (Date.now() < templateUnusableUntil) {
-    await sendRich();
-    return { channel: "freetext-fallback" };
-  }
-  try {
-    await sendWhatsAppTemplate(
-      phone,
-      template,
-      [firstName, shopName, formatNaira(amountOwed), dueText],
-      { creds, languageCode: process.env.WHATSAPP_REMINDER_TEMPLATE_LANG ?? "en_US" },
-    );
-    return { channel: "template" };
-  } catch (err) {
-    if (err instanceof WhatsAppSendError && err.code !== undefined && TEMPLATE_UNUSABLE_CODES.has(err.code)) {
+
+  const result = await deliverThenUpgrade({
+    phone,
+    now,
+    skipTemplate: Date.now() < templateUnusableUntil,
+    sendTemplate: () =>
+      sendWhatsAppTemplate(phone, template, [firstName, shopName, formatNaira(amountOwed), dueText], {
+        creds,
+        languageCode: process.env.WHATSAPP_REMINDER_TEMPLATE_LANG ?? "en_US",
+      }),
+    sendRich: async () => {
+      if (buttons?.length) await sendWhatsAppButtons(phone, richBody, buttons, creds);
+      else await sendWhatsAppMessage(phone, richBody, creds);
+    },
+    onTemplateUnusable: async (err) => {
       console.warn(
         `[reminder] template "${template}" unusable (Meta ${err.code}) — falling back to free text.`,
       );
@@ -136,9 +125,8 @@ export async function sendCustomerReminder(input: {
         }
       }
       templateUnusableUntil = Date.now() + TEMPLATE_RECHECK_MS;
-      await sendRich();
-      return { channel: "freetext-fallback" };
-    }
-    throw err; // recipient-level failures (blocked, not on WhatsApp) keep their meaning
-  }
+    },
+  });
+
+  return { channel: result.channel === "template-only" ? "template" : result.channel };
 }

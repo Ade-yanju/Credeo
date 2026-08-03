@@ -105,7 +105,7 @@ export async function sendOverdueInvoiceReminders(scope: Scope = {}) {
         creds: (await credsFor(invoice.organizationId)) ?? undefined,
         now,
       });
-      console.log(`[invoice-reminders] invoice=${invoice.invoiceNumber} to=${invoice.student.phone} channel=${delivery.channel}`);
+      console.log(`[invoice-reminders] invoice=${invoice.invoiceNumber} to=${invoice.student.phone} channel=${delivery.channel} delivered=${delivery.delivered}`);
       await prisma.invoice.update({
         where: { id: invoice.id },
         data: { overdueReminderSentAt: now },

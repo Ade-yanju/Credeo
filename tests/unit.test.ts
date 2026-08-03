@@ -13,6 +13,12 @@ import { signOrderToken, verifyOrderToken, signAmbassadorToken, verifyAmbassador
 import { normaliseAmbassadorCode } from "../src/lib/referral";
 import { detectIntent, parseInvoiceItem, parseQuickCredit, step, type SessionContext } from "../src/lib/whatsapp/state-machine";
 import { isPermanentFailure, parseMetaErrorCode } from "../src/lib/whatsapp/outbound";
+import { WhatsAppSendError } from "../src/lib/whatsapp/outbound";
+import {
+  deliverThenUpgrade,
+  isTemplateUnusable,
+  type DeliveryChannel,
+} from "../src/lib/whatsapp/session-window";
 import { contactPhoneFrom } from "../src/lib/whatsapp/contact";
 import { messages, payToBlock } from "../src/lib/whatsapp/messages";
 import { signVerification, verifyVerification, maskPhone } from "../src/lib/customer-verify-token";
@@ -518,4 +524,101 @@ test("CANCEL exits the invoice flow", () => {
   );
   assert.equal(r.contextPatch?.invStep, null);
   assert.match(r.reply, /cancelled/i);
+});
+
+// ── 24-hour window / deliver-then-upgrade ────────────────────────────────────
+//
+// The property that matters: an out-of-session customer must get the TEMPLATE
+// (the only thing Meta delivers outside the window) AND THEN the rich message,
+// because a delivered template re-opens the window. Getting this wrong is how
+// reminders silently vanish, so it is worth pinning down.
+
+/** Drives deliverThenUpgrade with the DB seams stubbed out. */
+function deliverThenUpgradeForTest(opts: {
+  sessionOpen: boolean;
+  sendTemplate: () => Promise<void>;
+  sendRich: () => Promise<void>;
+  onTemplateUnusable?: (err: WhatsAppSendError) => Promise<void>;
+  skipTemplate?: boolean;
+}): Promise<{ channel: DeliveryChannel; delivered: boolean; templateIssue?: string }> {
+  return deliverThenUpgrade({
+    phone: "+2348030000000",
+    sendTemplate: opts.sendTemplate,
+    sendRich: opts.sendRich,
+    onTemplateUnusable: opts.onTemplateUnusable,
+    skipTemplate: opts.skipTemplate,
+    isSessionOpen: async () => opts.sessionOpen,
+    onWindowOpened: async () => {},
+  });
+}
+
+test("isTemplateUnusable only matches Meta's template error codes", () => {
+  assert.equal(isTemplateUnusable(new WhatsAppSendError("nope", 400, 132001)), true);
+  assert.equal(isTemplateUnusable(new WhatsAppSendError("nope", 400, 132015)), true);
+  // 131026 = recipient unreachable. That is NOT a template problem — it must
+  // propagate so the caller can flag the number as blocked.
+  assert.equal(isTemplateUnusable(new WhatsAppSendError("blocked", 400, 131026)), false);
+  assert.equal(isTemplateUnusable(new Error("boom")), false);
+});
+
+test("deliverThenUpgrade: open session sends rich only, never the template", async () => {
+  const order: string[] = [];
+  const result = await deliverThenUpgradeForTest({
+    sessionOpen: true,
+    sendTemplate: async () => { order.push("template"); },
+    sendRich: async () => { order.push("rich"); },
+  });
+  assert.deepEqual(order, ["rich"]);
+  assert.equal(result.channel, "session");
+  assert.equal(result.delivered, true);
+});
+
+test("deliverThenUpgrade: closed session sends template THEN rich", async () => {
+  const order: string[] = [];
+  const result = await deliverThenUpgradeForTest({
+    sessionOpen: false,
+    sendTemplate: async () => { order.push("template"); },
+    sendRich: async () => { order.push("rich"); },
+  });
+  // Order matters: the template opens the window the rich message needs.
+  assert.deepEqual(order, ["template", "rich"]);
+  assert.equal(result.channel, "upgraded");
+  assert.equal(result.delivered, true);
+});
+
+test("deliverThenUpgrade: unusable template degrades honestly to delivered=false", async () => {
+  let provisioned = false;
+  const result = await deliverThenUpgradeForTest({
+    sessionOpen: false,
+    sendTemplate: async () => { throw new WhatsAppSendError("missing", 400, 132001); },
+    sendRich: async () => {},
+    onTemplateUnusable: async () => { provisioned = true; },
+  });
+  assert.equal(result.channel, "freetext-fallback");
+  // The whole point: free text outside the window may be silently dropped, so
+  // we must NOT report it as delivered.
+  assert.equal(result.delivered, false);
+  assert.equal(provisioned, true, "should attempt to self-provision the template");
+});
+
+test("deliverThenUpgrade: template delivered but rich failing still counts as delivered", async () => {
+  const result = await deliverThenUpgradeForTest({
+    sessionOpen: false,
+    sendTemplate: async () => {},
+    sendRich: async () => { throw new Error("rich send failed"); },
+  });
+  assert.equal(result.channel, "template-only");
+  // The customer WAS notified by the template, so this is a real delivery.
+  assert.equal(result.delivered, true);
+});
+
+test("deliverThenUpgrade: recipient-level errors propagate, not swallowed", async () => {
+  await assert.rejects(
+    deliverThenUpgradeForTest({
+      sessionOpen: false,
+      sendTemplate: async () => { throw new WhatsAppSendError("blocked", 400, 131026); },
+      sendRich: async () => {},
+    }),
+    /blocked/,
+  );
 });

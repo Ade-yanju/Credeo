@@ -6,6 +6,13 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: "2mb",
     },
+    // The invoice PDF embeds real fonts (needed for the Naira sign, which base
+    // PDF fonts lack). Next's tracer can't see these .ttf files because they are
+    // loaded by runtime path, not imported — so name them explicitly or the
+    // route 500s on Vercel with ENOENT while working fine locally.
+    outputFileTracingIncludes: {
+      "/invoice/[token]/pdf": ["./src/lib/fonts/**"],
+    },
   },
   images: {
     remotePatterns: [{ protocol: "https", hostname: "**.supabase.co" }],

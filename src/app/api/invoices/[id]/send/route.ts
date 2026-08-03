@@ -54,7 +54,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       richBody: body,
       creds: creds ?? undefined,
     });
-    console.log(`[invoices/send] invoice=${invoice.invoiceNumber} to=${invoice.student.phone} channel=${delivery.channel}`);
+    console.log(`[invoices/send] invoice=${invoice.invoiceNumber} to=${invoice.student.phone} channel=${delivery.channel} delivered=${delivery.delivered}`);
+    if (!delivery.delivered) {
+      console.warn(`[invoices/send] NOT guaranteed delivered — ${delivery.templateIssue ?? "no open session and no usable template"}`);
+    }
   } catch (err) {
     console.error("[invoices/send] WhatsApp send failed:", err);
     return NextResponse.json(

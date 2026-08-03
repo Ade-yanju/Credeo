@@ -29,6 +29,13 @@ export type BnplRiskResult = {
   openOrders: number;
   hasDefault: boolean;
   isNewCustomer: boolean;
+  /**
+   * Advisory only — an AI reading of repayment behaviour, shown to the vendor
+   * to help a manual approval decision. It NEVER changes `allowed`: the rules
+   * above are the safety gate, and a model must not be able to talk the system
+   * into extending credit the deterministic limits refused.
+   */
+  aiInsight?: { score: number; reasons: string[] };
 };
 
 export async function assessBnplRisk(input: {
@@ -79,4 +86,52 @@ export async function assessBnplRisk(input: {
   }
 
   return { allowed: true, ...base };
+}
+
+/**
+ * Optional AI reading of a customer's repayment behaviour, for a vendor who is
+ * deciding whether to approve manually.
+ *
+ * Deliberately NOT part of assessBnplRisk: that function is the safety gate and
+ * must stay fast, deterministic, and impossible for a model to influence. This
+ * is a separate, advisory call — returns null when AI is unavailable.
+ */
+export async function explainCustomerRisk(input: {
+  organizationId: string;
+  studentId: string;
+}): Promise<{ score: number; reasons: string[] } | null> {
+  const [student, credits] = await Promise.all([
+    prisma.student.findUnique({
+      where: { id: input.studentId },
+      select: { fullName: true },
+    }),
+    prisma.credit.findMany({
+      where: { organizationId: input.organizationId, studentId: input.studentId },
+      select: { amount: true, amountRepaid: true, status: true, dueDate: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+      take: 25,
+    }),
+  ]);
+  if (!student || !credits.length) return null;
+
+  const { suggestRiskScore } = await import("@/lib/ai");
+  const totalOwed = credits.reduce(
+    (s, c) => s + Math.max(0, Number(c.amount) - Number(c.amountRepaid)),
+    0,
+  );
+
+  return suggestRiskScore({
+    customerName: student.fullName,
+    totalOwed,
+    history: credits.map((c) => ({
+      date: c.createdAt.toISOString().slice(0, 10),
+      amount: Number(c.amount),
+      status:
+        c.status === "PAID"
+          ? "PAID"
+          : c.status === "OVERDUE"
+            ? "OVERDUE"
+            : "UNPAID",
+    })),
+  });
 }

@@ -27,7 +27,7 @@ export async function GET(_: Request, { params }: { params: { token: string } })
   if (!invoice) return NextResponse.json({ error: "Invoice not found." }, { status: 404 });
 
   const primaryBranch = invoice.branch ?? invoice.organization.branches[0] ?? null;
-  const pdf = generateInvoicePdf({
+  const pdf = await generateInvoicePdf({
     invoiceNumber: invoice.invoiceNumber,
     status: invoice.status,
     createdAt: invoice.createdAt,
