@@ -227,6 +227,10 @@ model Vendor {
   bankName          String?
   bankAccountNumber String?
   bankAccountName   String?
+  // Language this vendor speaks in voice notes (ISO-639: yo | ig | ha | en).
+  // Stored because the speech-to-text provider does not detect language — it
+  // must be told which one to assume, and asking once beats guessing per note.
+  voiceLanguage     String   @default("en")
   // Set once, at registration, from the /r/<code> referral cookie.
   referredByAmbassadorId String?
   referredBy             Ambassador? @relation(fields: [referredByAmbassadorId], references: [id])
@@ -244,6 +248,7 @@ model Vendor {
   ledgerEntries WalletLedgerEntry[]
   invoices      Invoice[]
   disputes      Dispute[]
+  paymentReceipts PaymentReceipt[]
 
   @@index([communityId])
   @@index([organizationId])
@@ -295,6 +300,7 @@ model Student {
   couponRedemptions CouponRedemption[]
   invoices      Invoice[]
   disputes      Dispute[]
+  paymentReceipts PaymentReceipt[]
 
   @@index([communityId])
   @@index([organizationId])
@@ -337,6 +343,7 @@ model Credit {
   scoreEvents     CreditScoreEvent[]
   bnplOrders      BnplOrder[]
   disputes        Dispute[]
+  paymentReceipts PaymentReceipt[]
 
   @@index([vendorId])
   @@index([organizationId])
@@ -846,6 +853,45 @@ enum NotificationType {
   SUCCESS
   WARNING
   DANGER
+}
+
+// ─────────────────────────────────────────────
+// PAYMENT RECEIPTS (OCR intake)
+// ─────────────────────────────────────────────
+
+/**
+ * One row per transfer receipt a customer sends in on WhatsApp.
+ *
+ * Exists to make the duplicate check exact and cheap: a customer resending the
+ * same screenshot must not raise a second claim against the vendor, and the
+ * previous approach (substring-scanning Notification.message for the reference)
+ * was unindexed and not scoped per vendor — so one customer's reference could
+ * suppress a different vendor's legitimate receipt.
+ */
+model PaymentReceipt {
+  id          String   @id @default(cuid())
+  vendorId    String
+  vendor      Vendor   @relation(fields: [vendorId], references: [id])
+  studentId   String
+  student     Student  @relation(fields: [studentId], references: [id])
+  creditId    String?
+  credit      Credit?  @relation(fields: [creditId], references: [id])
+  // Transaction reference as printed on the receipt. Null when OCR could not
+  // read one — those rows are audit trail only and never dedupe anything.
+  reference   String?
+  amount      Decimal  @db.Decimal(12, 2)
+  bankName    String?
+  senderName  String?
+  confidence  String   // "high" | "medium" | "low", as reported by the model
+  createdAt   DateTime @default(now())
+
+  // The dedupe guarantee: the same reference cannot be claimed twice against
+  // the same vendor. Scoped per vendor so two vendors can each receive a
+  // receipt carrying the same bank reference without one blocking the other.
+  @@unique([vendorId, reference])
+  @@index([studentId])
+  @@index([creditId])
+  @@index([createdAt])
 }
 
 // ─────────────────────────────────────────────

@@ -437,6 +437,39 @@ export const messages = {
     `✅ Saved.\n\n🏦 *${bankName}* — ${accountNumber}\n${accountName}\n\n` +
     `From now on every reminder I send your customers will show these details, so they can pay without asking you. Reply *ACCOUNT* any time to change them.`,
 
+  // ── Voice notes ────────────────────────────────────────────────────────
+  /**
+   * Asked once, the first time a vendor sends a voice note. The speech-to-text
+   * provider does not detect language — it must be told which to assume — so
+   * this is a real question, not a preference toggle.
+   */
+  voiceAskLanguage: () =>
+    `🎤 I can take voice notes — nice.\n\n` +
+    `Which language do you speak them in? Tap one and I'll remember it.\n\n` +
+    `Reply *LANGUAGE* any time to change it.`,
+
+  voiceLanguageSaved: (label: string) =>
+    `✅ Saved — I'll listen in *${label}* from now on.\n\n` +
+    `Send that voice note again and I'll write it down.`,
+
+  /**
+   * Echoes what we heard before acting on it. Always shown: a vendor must be
+   * able to catch a misheard amount before it reaches their ledger.
+   */
+  voiceHeard: (transcript: string) => `🎤 I heard:\n\n_"${transcript}"_`,
+
+  voiceUnclear: () =>
+    `🎤 I couldn't make out that voice note. Please say it again, or type it — ` +
+    `for example *ADD Chidi 08012345678 2500 7d*.`,
+
+  voiceTooLong: () =>
+    `🎤 That voice note is too long for me. Please send a shorter one — ` +
+    `a few seconds is plenty — or type the credit instead.`,
+
+  voiceUnavailable: () =>
+    `🎤 I can't listen to voice notes right now. Please type the credit instead — ` +
+    `for example *ADD Chidi 08012345678 2500 7d*.`,
+
   // ── HELP & misc ────────────────────────────────────────────────────────
   help: () =>
     `*Vodium Ledger commands:*\n\n` +
@@ -447,8 +480,10 @@ export const messages = {
     `• *LIST* : see who owes you\n` +
     `• *SCORE [name]* : check a customer's reliability\n` +
     `• *ACCOUNT* : set the bank details shown on reminders\n` +
+    `• *LANGUAGE* : set the language for your voice notes\n` +
     `• *DASHBOARD* : get a link to your full dashboard\n` +
-    `• *SUPPORT* : talk to a human`,
+    `• *SUPPORT* : talk to a human\n\n` +
+    `You can also send me a *voice note* instead of typing.`,
 
 
   unknown: () =>

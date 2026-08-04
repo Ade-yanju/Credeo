@@ -24,6 +24,12 @@ import { messages } from "../../../lib/whatsapp/messages";
 import { sendTypingIndicator, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppMessage, type WhatsAppButton } from "../../../lib/whatsapp/outbound";
 import { sendCustomerInvoice } from "../../../lib/whatsapp/invoice-delivery";
 import { handleIncomingReceipt } from "../../../lib/whatsapp/receipt-intake";
+import {
+  handleIncomingVoiceNote,
+  handleVoiceLanguageChoice,
+  askVoiceLanguage,
+  VOICE_LANG_ASKED_KEY,
+} from "../../../lib/whatsapp/voice-intake";
 import { rescueUnknownMessage } from "../../../lib/whatsapp/ai-fallback";
 import { getOrgChannelCredentials } from "../../../lib/whatsapp/channel-token";
 import { contactPhoneFrom } from "../../../lib/whatsapp/contact";
@@ -53,7 +59,7 @@ interface MetaTextMessage {
   from:      string;   // E.164 without "+"
   id:        string;
   timestamp: string;
-  type:      "text" | "interactive" | "contacts" | "image" | string;
+  type:      "text" | "interactive" | "contacts" | "image" | "audio" | string;
   text?:     { body: string };
   // A photo or screenshot. Meta sends only an id — the bytes are fetched
   // separately (see lib/whatsapp/media.ts). Customers use this to send bank
@@ -62,6 +68,15 @@ interface MetaTextMessage {
     id: string;
     mime_type?: string;
     caption?: string;
+    sha256?: string;
+  };
+  // A voice note (or any audio file). Like an image, only an id arrives here.
+  // `voice` is true for the hold-to-talk recorder and false for an attached
+  // audio file; both are transcribed the same way, so we don't branch on it.
+  audio?: {
+    id: string;
+    mime_type?: string;
+    voice?: boolean;
     sha256?: string;
   };
   interactive?: {
@@ -186,6 +201,9 @@ export async function POST(req: NextRequest) {
   // A customer image is a payment-receipt candidate: the bot reads it (OCR) and
   // raises a confirm-reject claim for the vendor. Handled before the text gate
   // below so a receipt is not dropped as "unsupported media".
+  //
+  // A vendor voice note carries no text at all until it is transcribed, so it
+  // has to clear the same gate on the strength of its type alone.
   const rawText =
     message?.type === "text"
       ? message.text?.body
@@ -198,19 +216,24 @@ export async function POST(req: NextRequest) {
             : undefined;
 
   const isImageMessage = message?.type === "image";
+  const isAudioMessage = message?.type === "audio";
 
   // Silently ack status updates, delivery receipts, unsupported media, etc.
-  if (!message || (!rawText?.trim() && !isImageMessage)) {
+  if (!message || (!rawText?.trim() && !isImageMessage && !isAudioMessage)) {
     return NextResponse.json({ ok: true });
   }
 
   const fromPhone   = `+${message.from}`;   // Meta sends without "+", normalise to E.164
-  const messageText = rawText?.trim() ?? "";
+  // Reassigned when a voice note is transcribed, so the rest of the turn treats
+  // spoken input as though it had been typed.
+  let messageText = rawText?.trim() ?? "";
 
   console.log(
     isImageMessage
       ? `[whatsapp] ← ${fromPhone}: [image ${message.image?.id ?? "?"}]`
-      : `[whatsapp] ← ${fromPhone}: "${messageText}"`,
+      : isAudioMessage
+        ? `[whatsapp] ← ${fromPhone}: [audio ${message.audio?.id ?? "?"}]`
+        : `[whatsapp] ← ${fromPhone}: "${messageText}"`,
   );
 
   // Meta retries a delivery it thinks failed (including when we simply replied
@@ -334,6 +357,55 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // ── Voice notes ─────────────────────────────────────────────────────────
+    // Everything below this block deals in text. A voice note is turned into
+    // text here and then forgotten about, so the NLU, the state machine and the
+    // AI rescue need no knowledge that audio exists.
+    const sessionContext = (session.context as Record<string, unknown> | null) ?? {};
+
+    // Language choice, however it arrives — a tap on the list, or the vendor
+    // typing LANGUAGE to change it later.
+    if (
+      await handleVoiceLanguageChoice({ text: messageText, vendorId: vendor.id, fromPhone, creds })
+    ) {
+      return NextResponse.json({ ok: true });
+    }
+    if (["LANGUAGE", "LANG"].includes(messageText.trim().toUpperCase())) {
+      await askVoiceLanguage(fromPhone, creds);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (isAudioMessage && message.audio?.id) {
+      const languageAsked = sessionContext[VOICE_LANG_ASKED_KEY] === true;
+      const voice = await handleIncomingVoiceNote({
+        fromPhone,
+        mediaId: message.audio.id,
+        vendor,
+        languageAsked,
+        creds,
+      });
+
+      if (voice.status !== "transcribed") {
+        // The one-time language question must not be asked twice, so record
+        // that it happened even though the note itself went unprocessed.
+        if (!languageAsked) {
+          await prisma.whatsAppSession.update({
+            where: { phone: fromPhone },
+            data: {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              context: { ...sessionContext, [VOICE_LANG_ASKED_KEY]: true } as any,
+            },
+          });
+        }
+        return NextResponse.json({ ok: true });
+      }
+
+      // Echo before acting. A vendor has to be able to catch a misheard amount,
+      // and this is the only place the raw transcript is ever visible to them.
+      await sendWhatsAppMessage(fromPhone, messages.voiceHeard(voice.transcript), creds);
+      messageText = voice.transcript;
+    }
+
     // A vendor can also be someone's DEBTOR ("anybody can be a debtor"). From
     // them, a bare "PAID" is ambiguous: settling their own credit vs marking a
     // customer of theirs paid. Buttons on reminders carry the unambiguous
@@ -355,7 +427,6 @@ export async function POST(req: NextRequest) {
       // "who is this credit for?" step — so the phone number, amount and final
       // confirmation all still run through the ordinary, well-tested path.
       // Nothing reaches the ledger without the standard double-check.
-      const sessionContext = (session.context as Record<string, unknown> | null) ?? {};
       const aiName = String(sessionContext.aiPendingName ?? "").trim();
       if (aiName) {
         effectiveText = aiName;

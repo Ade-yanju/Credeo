@@ -30,6 +30,22 @@ const OPEN_STATUSES = ["OUTSTANDING", "DUE_SOON", "OVERDUE"] as const;
 /** Treat amounts within this margin as matching, to absorb OCR rounding. */
 const AMOUNT_TOLERANCE = 1;
 
+/**
+ * True when a PaymentReceipt insert lost the race on (vendorId, reference) —
+ * i.e. this exact receipt was already claimed against this vendor.
+ *
+ * Narrowed to that one constraint on purpose: any other unique violation is a
+ * real bug and must keep throwing rather than be reported to the customer as a
+ * duplicate receipt.
+ */
+function isDuplicateReference(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { code?: unknown }).code === "P2002"
+  );
+}
+
 export interface ReceiptHandlingResult {
   handled: boolean;
   reason?: string;
@@ -122,28 +138,6 @@ export async function handleIncomingReceipt(input: {
     return { handled: true, reason: "low confidence read" };
   }
 
-  // Duplicate guard: the same transaction reference must not raise a second
-  // claim, or a customer resending a screenshot looks like two payments.
-  if (receipt.reference) {
-    const seen = await prisma.notification.findFirst({
-      where: {
-        type: "INFO",
-        title: "Payment Receipt",
-        message: { contains: receipt.reference },
-      },
-      select: { id: true },
-    });
-    if (seen) {
-      await sendWhatsAppMessage(
-        fromPhone,
-        `I already have that receipt (ref ${receipt.reference}). Your vendor has been notified — ` +
-          "please wait for them to confirm.",
-        creds,
-      );
-      return { handled: true, reason: "duplicate reference" };
-    }
-  }
-
   // Match the receipt to a specific credit where we safely can: an exact amount
   // match is unambiguous. Otherwise raise the claim against the oldest debt and
   // let the vendor decide.
@@ -152,6 +146,39 @@ export async function handleIncomingReceipt(input: {
   );
   const target = exact ?? credits[0];
   const targetAmount = Number(target.amount);
+
+  // Duplicate guard: the same transaction reference must not raise a second
+  // claim, or a customer resending a screenshot looks like two payments.
+  //
+  // The insert IS the check — the unique index on (vendorId, reference) decides
+  // it, rather than a read-then-write that two simultaneous webhook deliveries
+  // could both pass. Recorded before the vendor is notified so a duplicate never
+  // reaches them at all. Receipts whose reference OCR could not read are stored
+  // with reference = null; Postgres treats NULLs as distinct, so those rows are
+  // audit trail only and never suppress a later, readable receipt.
+  try {
+    await prisma.paymentReceipt.create({
+      data: {
+        vendorId: target.vendor.id,
+        studentId: student.id,
+        creditId: target.id,
+        reference: receipt.reference ?? null,
+        amount: receipt.amount,
+        bankName: receipt.bankName ?? null,
+        senderName: receipt.senderName ?? null,
+        confidence: receipt.confidence,
+      },
+    });
+  } catch (err) {
+    if (!isDuplicateReference(err)) throw err;
+    await sendWhatsAppMessage(
+      fromPhone,
+      `I already have that receipt (ref ${receipt.reference}). Your vendor has been notified — ` +
+        "please wait for them to confirm.",
+      creds,
+    );
+    return { handled: true, reason: "duplicate reference" };
+  }
 
   await notifyVendorOfReceipt({ receipt, student, target, targetAmount, matchedExactly: Boolean(exact) });
 
