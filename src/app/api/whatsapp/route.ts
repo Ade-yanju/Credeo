@@ -25,6 +25,16 @@ import { sendTypingIndicator, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAp
 import { sendCustomerInvoice } from "../../../lib/whatsapp/invoice-delivery";
 import { handleIncomingReceipt } from "../../../lib/whatsapp/receipt-intake";
 import {
+  beginLedgerImport,
+  readLedgerPhoto,
+  commitLedgerImport,
+  parseStagedRows,
+  AWAITING_LEDGER_KEY,
+  LEDGER_ROWS_KEY,
+  LEDGER_CONFIRM_ID,
+  LEDGER_CANCEL_ID,
+} from "../../../lib/whatsapp/ledger-import";
+import {
   handleIncomingVoiceNote,
   handleVoiceLanguageChoice,
   askVoiceLanguage,
@@ -284,15 +294,24 @@ export async function POST(req: NextRequest) {
       }),
     ]);
     const creds = credsRaw ?? undefined;
+    const sessionContext = (session.context as Record<string, unknown> | null) ?? {};
 
     // Mark the message read and show "typing…" while we think — the reply
     // replaces it. Cosmetic, so it must never block or fail the turn.
     void sendTypingIndicator(message.id, creds);
 
+    // A vendor who just replied IMPORT is sending a page of their paper book,
+    // not a transfer receipt. Both arrive as an image from the same number, so
+    // the stated intent is the only thing that separates them — without it, a
+    // vendor who is also someone's debtor would be ambiguous. Handled after
+    // vendor resolution below, so skip the receipt path here.
+    const isLedgerPhoto =
+      isImageMessage && Boolean(vendorByPhone) && sessionContext[AWAITING_LEDGER_KEY] === true;
+
     // A photo from someone who owes money is almost always a transfer receipt.
     // Read it and raise a claim for the vendor to confirm — OCR never marks a
     // credit paid by itself (see receipt-intake.ts for the safety model).
-    if (isImageMessage && message.image?.id) {
+    if (isImageMessage && message.image?.id && !isLedgerPhoto) {
       const receiptResult = await handleIncomingReceipt({
         fromPhone,
         mediaId: message.image.id,
@@ -309,8 +328,8 @@ export async function POST(req: NextRequest) {
       if (!messageText) {
         await sendWhatsAppMessage(
           fromPhone,
-          "Thanks for the image. I can only read payment receipts — reply with a command like " +
-            "*ADD*, *LIST* or *HELP* and I'll take it from there.",
+          "Thanks for the image. If that's a page of your credit book, reply *IMPORT* and send it " +
+            "again — I'll read it and type it in for you.\n\nOtherwise reply *ADD*, *LIST* or *HELP*.",
           creds,
         );
         return NextResponse.json({ ok: true });
@@ -357,11 +376,102 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // ── Ledger book import ──────────────────────────────────────────────────
+    // Photograph the paper book, confirm what was read, save. Nothing reaches
+    // the ledger without the vendor seeing every row first (ledger-import.ts).
+    const upperForLedger = messageText.trim().toUpperCase();
+
+    if (["IMPORT", "BOOK", "SCAN"].includes(upperForLedger)) {
+      await beginLedgerImport(fromPhone, creds);
+      await prisma.whatsAppSession.update({
+        where: { phone: fromPhone },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: { context: { ...sessionContext, [AWAITING_LEDGER_KEY]: true } as any },
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (isLedgerPhoto && message.image?.id) {
+      const rows = await readLedgerPhoto({ fromPhone, mediaId: message.image.id, creds });
+      // Clear the awaiting flag either way — a failed read must not leave the
+      // vendor's next unrelated photo being parsed as a ledger page.
+      await prisma.whatsAppSession.update({
+        where: { phone: fromPhone },
+        data: {
+          context: {
+            ...sessionContext,
+            [AWAITING_LEDGER_KEY]: false,
+            [LEDGER_ROWS_KEY]: rows ?? null,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any,
+        },
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (upperForLedger === LEDGER_CANCEL_ID) {
+      await prisma.whatsAppSession.update({
+        where: { phone: fromPhone },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: { context: { ...sessionContext, [LEDGER_ROWS_KEY]: null } as any },
+      });
+      await sendWhatsAppMessage(fromPhone, messages.ledgerCancelled(), creds);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (upperForLedger === LEDGER_CONFIRM_ID) {
+      const rows = parseStagedRows(sessionContext[LEDGER_ROWS_KEY]);
+      if (!rows.length) {
+        // Staged rows expired or were already imported — never silently
+        // re-import, which would double every debt on the page.
+        await sendWhatsAppMessage(fromPhone, messages.ledgerCancelled(), creds);
+        return NextResponse.json({ ok: true });
+      }
+
+      // Clear the staged rows BEFORE importing. A Meta retry of this same tap
+      // would otherwise run the import twice and double the vendor's book.
+      await prisma.whatsAppSession.update({
+        where: { phone: fromPhone },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: { context: { ...sessionContext, [LEDGER_ROWS_KEY]: null } as any },
+      });
+
+      const vendorForImport = await prisma.vendor.findUnique({
+        where: { id: vendor.id },
+        include: { subscription: true },
+      });
+      const outcome = await commitLedgerImport({
+        vendor: {
+          id: vendor.id,
+          businessName: vendor.businessName,
+          phone: vendor.phone,
+          communityId: vendor.communityId,
+          organizationId: vendor.organizationId,
+          branchId: vendor.branchId,
+          subscription: vendorForImport?.subscription
+            ? { plan: vendorForImport.subscription.plan }
+            : null,
+        },
+        rows,
+      });
+
+      console.log(
+        `[ledger] ${fromPhone} imported=${outcome.imported} skipped=${outcome.skipped} hitLimit=${outcome.hitLimit}`,
+      );
+      await sendWhatsAppMessage(
+        fromPhone,
+        outcome.hitLimit && outcome.limit
+          ? messages.ledgerImportHitLimit(outcome.imported, outcome.limit)
+          : messages.ledgerImported(outcome.imported, outcome.skipped),
+        creds,
+      );
+      return NextResponse.json({ ok: true });
+    }
+
     // ── Voice notes ─────────────────────────────────────────────────────────
     // Everything below this block deals in text. A voice note is turned into
     // text here and then forgotten about, so the NLU, the state machine and the
     // AI rescue need no knowledge that audio exists.
-    const sessionContext = (session.context as Record<string, unknown> | null) ?? {};
 
     // Language choice, however it arrives — a tap on the list, or the vendor
     // typing LANGUAGE to change it later.

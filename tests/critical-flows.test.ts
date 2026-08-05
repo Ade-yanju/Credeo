@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { isValidTemplateName, normaliseTemplateName, resolveConfiguredTemplateName, DEFAULT_OTP_TEMPLATE_NAME } from "../src/lib/otp-delivery";
 import { DEFAULT_INVOICE_TEMPLATE, resolveInvoiceTemplateName } from "../src/lib/whatsapp/invoice-template";
+import { makePlaceholderPhone, parseStagedRows } from "../src/lib/whatsapp/ledger-rows";
 
 process.env.SESSION_SECRET = "test-session-secret";
 process.env.SECRET_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
@@ -506,4 +507,78 @@ test("a new debtor can be saved without a code, an existing customer cannot", ()
 test("verification still never blocks cancelling", () => {
   const r = send("VERIFYING_CUSTOMER", { pvNew: true, pvPhone: "+2348012345678", pvHmac: "h", pvExpiresAt: Date.now() + 60_000 }, "CANCEL");
   assert.equal(r.nextState, "IDLE");
+});
+
+// ── Ledger book import ────────────────────────────────────────────────────
+// A vendor's paper book is the one dataset they cannot recreate if we corrupt
+// it. These assert the properties that stop an import writing junk debt.
+
+test("imported customers can never be sent a reminder", () => {
+  // The whole safety case for importing without phone numbers rests on the
+  // `pending:` prefix being exactly what every send path filters on. If this
+  // prefix and those filters ever drift, imported customers start receiving
+  // debt reminders at a number that is not a number.
+  assert.ok(makePlaceholderPhone().startsWith("pending:"), "placeholder must carry the pending: prefix");
+
+  for (const file of [
+    "src/app/api/cron/reminders/route.ts",
+    "src/lib/credit-lifecycle.ts",
+    "src/lib/invoice-lifecycle.ts",
+  ]) {
+    const src = readFileSync(file, "utf8");
+    assert.match(src, /startsWith: "pending:"/, `${file} must exclude pending: numbers from sending`);
+  }
+});
+
+test("a bulk import cannot collide on the unique phone column", () => {
+  // Student.phone is unique and an import creates every row inside the same
+  // millisecond, so a timestamp-only key (as used elsewhere in the repo) would
+  // drop every row after the first.
+  const generated = new Set(Array.from({ length: 500 }, () => makePlaceholderPhone()));
+  assert.equal(generated.size, 500, "placeholder phones must be unique within one millisecond");
+});
+
+test("staged ledger rows are re-validated before anything is written", () => {
+  // The rows round-trip through a JSON session blob, so what comes back is
+  // untrusted: a truncated write or an old schema must not become a debt.
+  const rows = parseStagedRows([
+    { customerName: "Chidi Okeke", amountOwed: 2500 },
+    { customerName: "", amountOwed: 900 },          // no name
+    { customerName: "Ngozi", amountOwed: 0 },        // no amount
+    { customerName: "Emeka", amountOwed: -50 },      // negative debt
+    "not-an-object",
+    null,
+  ]);
+  assert.equal(rows.length, 1, "only the one complete row may survive");
+  assert.equal(rows[0].customerName, "Chidi Okeke");
+
+  // A missing or malformed blob must yield nothing rather than throw.
+  assert.deepEqual(parseStagedRows(undefined), []);
+  assert.deepEqual(parseStagedRows("garbage"), []);
+});
+
+test("customer ids stay distinct for a numeric business name", () => {
+  // Deriving the prefix by stripping trailing digits off a generated id breaks
+  // when the business name is itself numeric ("123 Store" → prefix "123", whose
+  // whole generated id is digits) — every imported customer would then collide
+  // on a blank prefix. Assert the import uses the prefix helper directly.
+  // Checked by reading source because customer-id.ts imports Prisma, and this
+  // suite must stay runnable without a database.
+  const src = readFileSync("src/lib/whatsapp/ledger-import.ts", "utf8");
+  assert.match(src, /vendorCustomerPrefix\(vendor\.businessName\)/, "must use the prefix helper");
+  assert.ok(
+    !/replace\(\/\\d\+\$\//.test(src),
+    "must not derive the prefix by stripping trailing digits",
+  );
+});
+
+test("confirming an import clears the staged rows before writing", () => {
+  // Meta retries a delivery it thinks failed, re-sending the same tap. If the
+  // rows were still staged on the retry, the vendor's whole page imports twice.
+  const webhook = readFileSync("src/app/api/whatsapp/route.ts", "utf8");
+  const confirmBlock = webhook.slice(webhook.indexOf("LEDGER_CONFIRM_ID) {"));
+  const clearAt = confirmBlock.indexOf("LEDGER_ROWS_KEY]: null");
+  const importAt = confirmBlock.indexOf("commitLedgerImport");
+  assert.ok(clearAt !== -1 && importAt !== -1, "confirm branch must clear rows and import");
+  assert.ok(clearAt < importAt, "staged rows must be cleared BEFORE the import runs");
 });

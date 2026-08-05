@@ -17,6 +17,13 @@ export type InvoiceItemEntry = {
   unitPrice: number;
 };
 
+/** One row read off a photographed handwritten ledger page. */
+export type LedgerRow = {
+  customerName: string;
+  amountOwed: number;
+  note?: string;
+};
+
 function invoiceItemLines(items: InvoiceItemEntry[]): string {
   return items
     .map((i, idx) => `${idx + 1}. *${i.name}* ×${i.quantity} : ${formatNaira(i.quantity * i.unitPrice)}`)
@@ -470,6 +477,67 @@ export const messages = {
     `🎤 I can't listen to voice notes right now. Please type the credit instead — ` +
     `for example *ADD Chidi 08012345678 2500 7d*.`,
 
+  // ── Ledger book import ─────────────────────────────────────────────────
+  ledgerAskPhoto: () =>
+    `📖 Let's move your book into Vodium.\n\n` +
+    `Take a clear photo of one page and send it to me. Make sure the names and ` +
+    `amounts are in focus, with good light.\n\n` +
+    `I'll read it and show you everything before I save anything.`,
+
+  /**
+   * The whole safety model in one message: every row visible, unreadable rows
+   * admitted to rather than hidden, and nothing saved until the vendor taps.
+   */
+  ledgerConfirm: (rows: LedgerRow[], unreadableRows: number, dueDays: number, droppedRows = 0) => {
+    const lines = rows
+      .map((r, i) => `${i + 1}. *${r.customerName}* — ${formatNaira(r.amountOwed)}${r.note ? ` (${r.note})` : ""}`)
+      .join("\n");
+    const total = rows.reduce((sum, r) => sum + r.amountOwed, 0);
+    const unreadable = unreadableRows > 0
+      ? `\n\n⚠️ I could not read *${unreadableRows}* ${unreadableRows === 1 ? "row" : "rows"} on that page. ` +
+        `Add ${unreadableRows === 1 ? "it" : "them"} yourself with *ADD* after this.`
+      : "";
+    const dropped = droppedRows > 0
+      ? `\n\n⚠️ That page had more rows than I can take at once, so *${droppedRows}* ` +
+        `${droppedRows === 1 ? "row was" : "rows were"} left out. Send the rest as a second photo.`
+      : "";
+    return (
+      `📖 Here's what I read from your book:\n\n${lines}\n\n` +
+      `*${rows.length} ${rows.length === 1 ? "customer" : "customers"} — ${formatNaira(total)} total*${unreadable}${dropped}\n\n` +
+      `Your book has no phone numbers, so I can't send these customers reminders yet. ` +
+      `Add a number later from your dashboard and reminders start working.\n\n` +
+      `Each will be due in ${dueDays} days. Check the names and amounts carefully — ` +
+      `tap *Import* to save, or *Cancel* to discard.`
+    );
+  },
+
+  ledgerImported: (imported: number, skipped: number) =>
+    `✅ Saved *${imported}* ${imported === 1 ? "customer" : "customers"} to your book.` +
+    (skipped > 0 ? `\n\n${skipped} ${skipped === 1 ? "row" : "rows"} could not be saved.` : "") +
+    `\n\nReply *LIST* to see everyone owing you, or send another page to import more.`,
+
+  ledgerImportHitLimit: (imported: number, limit: number) =>
+    `✅ Saved *${imported}* ${imported === 1 ? "customer" : "customers"}.\n\n` +
+    `⚠️ That's the ${limit}-customer limit on your current plan, so I stopped there. ` +
+    `Upgrade from your dashboard to import the rest.`,
+
+  ledgerCancelled: () =>
+    `No problem — nothing was saved.\n\nSend another photo any time, or reply *IMPORT* to start again.`,
+
+  ledgerNothingRead: () =>
+    `📖 I couldn't find any names and amounts on that page.\n\n` +
+    `Try again with more light and the page flat, or add customers one at a time with *ADD*.`,
+
+  ledgerUnreadable: () =>
+    `📖 I couldn't open that photo. Please send it again, or reply *ADD* to enter customers yourself.`,
+
+  ledgerNotAnImage: () =>
+    `📖 I can only read photos. Please send your page as a picture, not a file or document.`,
+
+  ledgerUnavailable: () =>
+    `📖 I can't read photos right now. Please add customers with *ADD* for the moment — ` +
+    `for example *ADD Chidi 08012345678 2500 7d*.`,
+
   // ── HELP & misc ────────────────────────────────────────────────────────
   help: () =>
     `*Vodium Ledger commands:*\n\n` +
@@ -480,6 +548,7 @@ export const messages = {
     `• *LIST* : see who owes you\n` +
     `• *SCORE [name]* : check a customer's reliability\n` +
     `• *ACCOUNT* : set the bank details shown on reminders\n` +
+    `• *IMPORT* : photograph your paper book and I'll type it in\n` +
     `• *LANGUAGE* : set the language for your voice notes\n` +
     `• *DASHBOARD* : get a link to your full dashboard\n` +
     `• *SUPPORT* : talk to a human\n\n` +

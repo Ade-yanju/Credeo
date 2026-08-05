@@ -20,10 +20,22 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const VISION_MODEL = "claude-sonnet-5";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? undefined });
+/**
+ * Built on first use, never at module load.
+ *
+ * The Anthropic constructor throws when no API key is present, so constructing
+ * it at import time takes the whole WhatsApp webhook route down with it whenever
+ * ANTHROPIC_API_KEY is unset — a build-time failure ("Failed to collect page
+ * data"), not a runtime one, and precisely the case this module's header
+ * promises to survive by returning null.
+ */
+let client: Anthropic | null = null;
 
-function enabled(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+function getClient(): Anthropic | null {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+  if (!client) client = new Anthropic({ apiKey });
+  return client;
 }
 
 /** Media types Claude vision accepts. Anything else must be converted first. */
@@ -96,7 +108,8 @@ export async function extractPaymentReceipt(input: {
   /** Vendor's account name, when known — lets the model verify the recipient. */
   expectedRecipient?: string;
 }): Promise<PaymentReceipt | null> {
-  if (!enabled()) return null;
+  const client = getClient();
+  if (!client) return null;
 
   const schema = {
     type: "object" as const,
@@ -193,7 +206,8 @@ export async function extractLedgerPage(input: {
   imageBase64: string;
   mediaType: VisionMediaType;
 }): Promise<null | { entries: LedgerPageEntry[]; unreadableRows: number }> {
-  if (!enabled()) return null;
+  const client = getClient();
+  if (!client) return null;
 
   const schema = {
     type: "object" as const,
