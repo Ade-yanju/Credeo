@@ -1,18 +1,44 @@
 "use client";
 import { cn } from "@/lib/utils";
 
-export function ShimmerButton({ children, className, onClick, type = "button" }: { children: React.ReactNode; className?: string; onClick?: () => void; type?: "button" | "submit" | "reset" }) {
+/**
+ * Primary call-to-action.
+ *
+ * Kept the name for continuity with its call sites, but the shimmer sweep and
+ * the 30px gold bloom are gone — a sweep animation on the button that starts a
+ * credit application reads as promotional, not dependable. What's left is a
+ * solid gold button with a brightness shift and a small press.
+ *
+ * `disabled` is a real attribute rather than the `opacity-40 pointer-events-none`
+ * the register wizard was using: that pattern still exposes the button to
+ * keyboard focus and Enter, so a disabled "Continue" could be activated by
+ * tabbing to it and skip a validation gate.
+ */
+export function ShimmerButton({
+  children,
+  className,
+  onClick,
+  type = "button",
+  disabled = false,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  onClick?: () => void;
+  type?: "button" | "submit" | "reset";
+  disabled?: boolean;
+}) {
   return (
     <button
       type={type}
       onClick={onClick}
+      disabled={disabled}
       className={cn(
-        "relative inline-flex items-center justify-center h-12 overflow-hidden rounded-xl px-8 font-semibold text-sm transition-all focus:outline-none",
+        "inline-flex h-11 items-center justify-center rounded-lg px-6 text-[14px] font-semibold",
         "bg-vodium-gold text-vodium-black",
-        "before:absolute before:inset-0 before:bg-gradient-to-r before:from-transparent before:via-white/25 before:to-transparent before:-translate-x-full hover:before:animate-[shimmer_1s_ease_1]",
-        "hover:shadow-[0_0_30px_rgba(201,169,97,0.4)] hover:brightness-105",
-        "active:scale-[0.98]",
-        className
+        "transition-[filter,transform] duration-100",
+        "hover:brightness-[1.06] active:scale-[0.99]",
+        "disabled:pointer-events-none disabled:opacity-40",
+        className,
       )}
     >
       {children}

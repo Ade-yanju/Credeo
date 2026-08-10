@@ -17,44 +17,9 @@ import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/utils";
 import { markOverdueCredits } from "@/lib/credit-lifecycle";
 import { GlowBadge } from "@/components/ui/glow-badge";
+import { ScoreRing } from "@/components/ui/score-ring";
+import { scoreBand, SCORE_BANDS, SCORE_MAX } from "@/lib/credit-score/bands";
 import type { CreditStatus, ScoreEventType } from "@prisma/client";
-
-// ── Score helpers ──────────────────────────────────────────────────────────────
-
-function scoreTier(score: number): {
-  label: string;
-  color: string;
-  ring: string;
-  badge: string;
-} {
-  if (score >= 750)
-    return {
-      label: "Excellent",
-      color: "text-emerald-400",
-      ring: "stroke-emerald-400",
-      badge: "bg-emerald-500/10 text-emerald-400 border-emerald-500/25",
-    };
-  if (score >= 650)
-    return {
-      label: "Good",
-      color: "text-vodium-gold",
-      ring: "stroke-vodium-gold",
-      badge: "bg-vodium-gold/10 text-vodium-gold border-vodium-gold/25",
-    };
-  if (score >= 450)
-    return {
-      label: "Fair",
-      color: "text-amber-400",
-      ring: "stroke-amber-400",
-      badge: "bg-amber-500/10 text-amber-400 border-amber-500/25",
-    };
-  return {
-    label: "Poor",
-    color: "text-rose-400",
-    ring: "stroke-rose-400",
-    badge: "bg-rose-500/10 text-rose-400 border-rose-500/25",
-  };
-}
 
 const STATUS_BADGE: Record<CreditStatus, string> = {
   OUTSTANDING: "badge badge-outstanding",
@@ -110,61 +75,6 @@ const EVENT_META: Record<
   },
 };
 
-// ── Score ring (SVG gauge) ─────────────────────────────────────────────────────
-
-function ScoreRing({
-  score,
-  tier,
-}: {
-  score: number;
-  tier: ReturnType<typeof scoreTier>;
-}) {
-  const r = 52;
-  const circ = 2 * Math.PI * r;
-  const pct = score / 1000;
-  const dash = circ * pct;
-  const gap = circ - dash;
-
-  return (
-    <div className="relative w-36 h-36 flex items-center justify-center mx-auto">
-      <svg
-        viewBox="0 0 120 120"
-        className="absolute inset-0 w-full h-full -rotate-90"
-        aria-hidden
-      >
-        {/* Track */}
-        <circle
-          cx="60"
-          cy="60"
-          r={r}
-          fill="none"
-          stroke="rgba(255,255,255,0.06)"
-          strokeWidth="8"
-        />
-        {/* Progress */}
-        <circle
-          cx="60"
-          cy="60"
-          r={r}
-          fill="none"
-          className={tier.ring}
-          strokeWidth="8"
-          strokeLinecap="round"
-          strokeDasharray={`${dash} ${gap}`}
-        />
-      </svg>
-      <div className="text-center z-10">
-        <p className={`font-serif text-3xl leading-none ${tier.color}`}>
-          {score}
-        </p>
-        <p className="text-[10px] text-vodium-cream/30 mt-1 uppercase tracking-wider">
-          / 1000
-        </p>
-      </div>
-    </div>
-  );
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function CustomerProfilePage({
@@ -203,7 +113,7 @@ export default async function CustomerProfilePage({
   if (credits.length === 0 && scoreEvents.length === 0) notFound();
 
   const now = new Date();
-  const tier = scoreTier(customer.vodiumScore);
+  const tier = scoreBand(customer.vodiumScore);
 
   // ── Computed stats ──────────────────────────────────────────────────────
   const outstanding = credits.filter(
@@ -285,12 +195,14 @@ export default async function CustomerProfilePage({
             </div>
           </div>
 
-          {/* Score ring */}
-          <div className="text-center flex-shrink-0">
-            <ScoreRing score={customer.vodiumScore} tier={tier} />
-            <p className="text-xs text-vodium-cream/35 mt-2">Vodium Score</p>
+          {/* Score gauge — shared with the dashboard's portfolio panel. */}
+          <div className="flex-shrink-0 text-center">
+            <ScoreRing score={customer.vodiumScore} />
+            <p className="mt-2 text-xs text-[color:var(--text-quaternary)]">
+              Vodium Score
+            </p>
             <span
-              className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border mt-1 inline-block ${tier.badge}`}
+              className={`mt-1 inline-block rounded-full border px-2.5 py-0.5 text-xs font-medium ${tier.chip}`}
             >
               {tier.label}
             </span>
@@ -475,24 +387,21 @@ export default async function CustomerProfilePage({
             <p className="text-[10px] text-vodium-cream/20 uppercase tracking-widest mb-2">
               Score bands
             </p>
-            {[
-              {
-                range: "750–1000",
-                label: "Excellent",
-                cls: "text-emerald-400",
-              },
-              { range: "650–749", label: "Good", cls: "text-vodium-gold" },
-              { range: "450–649", label: "Fair", cls: "text-amber-400" },
-              { range: "0–449", label: "Poor", cls: "text-rose-400" },
-            ].map((t) => (
-              <div
-                key={t.label}
-                className="flex items-center justify-between text-[11px]"
-              >
-                <span className={t.cls}>{t.label}</span>
-                <span className="text-vodium-cream/25">{t.range}</span>
-              </div>
-            ))}
+            {SCORE_BANDS.map((b, i) => {
+              // Upper bound is the next-strongest band's floor, minus one.
+              const upper = i === 0 ? SCORE_MAX : SCORE_BANDS[i - 1].min - 1;
+              return (
+                <div
+                  key={b.id}
+                  className="flex items-center justify-between text-[11px]"
+                >
+                  <span className={b.text}>{b.label}</span>
+                  <span className="tnum text-[color:var(--text-quaternary)]">
+                    {b.min}–{upper}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

@@ -7,42 +7,42 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle,
-  Store,
-  MapPin,
-  Phone,
-  MessageCircle,
-  Building2,
-  ShoppingBag,
-  UtensilsCrossed,
-  WashingMachine,
-  Printer,
-  Scissors,
-  Sparkles,
-  Pill,
-  ShoppingCart,
-  HelpCircle,
-  Shield,
-  Zap,
-  TrendingUp,
-  Lock,
+  ChevronDown,
   Eye,
   EyeOff,
-  Mail,
+  HelpCircle,
+  MessageCircle,
+  Pill,
+  Printer,
+  Scissors,
+  ShoppingBag,
+  ShoppingCart,
+  Sparkles,
+  UtensilsCrossed,
+  WashingMachine,
   RefreshCw,
-  ChevronDown,
 } from "lucide-react";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
-import { Spotlight } from "@/components/ui/spotlight";
+import { AuthStepPanel } from "@/components/ui/auth-step-panel";
+
+/**
+ * Vendor sign-up — a four-step wizard ending in an emailed verification code.
+ *
+ * Single centred column on the dark surface, matching sign-in and the
+ * dashboard. The previous layout gave 42% of the viewport to a marketing panel
+ * on a screen the vendor only reaches after already clicking "Start free
+ * trial".
+ */
 
 const VENDOR_TYPES = [
-  { value: "PROVISION_SHOP", label: "Provision Shop", icon: ShoppingBag },
-  { value: "FOOD_CANTEEN", label: "Food Canteen", icon: UtensilsCrossed },
+  { value: "PROVISION_SHOP", label: "Provision shop", icon: ShoppingBag },
+  { value: "FOOD_CANTEEN", label: "Food canteen", icon: UtensilsCrossed },
   { value: "LAUNDRY", label: "Laundry", icon: WashingMachine },
   { value: "PRINTING", label: "Printing", icon: Printer },
-  { value: "BARBING_SALON", label: "Barbing Salon", icon: Scissors },
-  { value: "HAIR_SALON", label: "Hair Salon", icon: Sparkles },
+  { value: "BARBING_SALON", label: "Barbing salon", icon: Scissors },
+  { value: "HAIR_SALON", label: "Hair salon", icon: Sparkles },
   { value: "PHARMACY", label: "Pharmacy", icon: Pill },
-  { value: "MINI_MART", label: "Mini Mart", icon: ShoppingCart },
+  { value: "MINI_MART", label: "Mini mart", icon: ShoppingCart },
   { value: "OTHER", label: "Other", icon: HelpCircle },
 ];
 
@@ -50,17 +50,12 @@ type PhoneCountry = "NG" | "US";
 
 const PHONE_COUNTRIES: Record<
   PhoneCountry,
-  {
-    flag: string;
-    dial: string;
-    placeholder: string;
-    hint: string;
-    minDigits: number;
-  }
+  { flag: string; dial: string; name: string; placeholder: string; hint: string; minDigits: number }
 > = {
   NG: {
     flag: "🇳🇬",
     dial: "+234",
+    name: "Nigeria",
     placeholder: "801 234 5678",
     hint: "Your Nigerian WhatsApp number",
     minDigits: 10,
@@ -68,6 +63,7 @@ const PHONE_COUNTRIES: Record<
   US: {
     flag: "🇺🇸",
     dial: "+1",
+    name: "United States",
     placeholder: "(415) 555-1234",
     hint: "Your US WhatsApp number",
     minDigits: 10,
@@ -96,6 +92,7 @@ export default function RegisterPage() {
   const router = useRouter();
   const submitting = useRef(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const countryRef = useRef<HTMLDivElement>(null);
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -106,12 +103,6 @@ export default function RegisterPage() {
   const [done, setDone] = useState(false);
   const [phoneCountry, setPhoneCountry] = useState<PhoneCountry>("NG");
   const [countryOpen, setCountryOpen] = useState(false);
-
-  useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const t = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
-    return () => clearTimeout(t);
-  }, [resendCooldown]);
   const [form, setForm] = useState<FormData>({
     businessName: "",
     vendorType: "",
@@ -123,6 +114,28 @@ export default function RegisterPage() {
     password: "",
   });
 
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
+
+  // The country dropdown previously stayed open until you picked something or
+  // typed in the number field — clicking anywhere else left it hanging.
+  useEffect(() => {
+    if (!countryOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!countryRef.current?.contains(e.target as Node)) setCountryOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setCountryOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [countryOpen]);
+
   function update(field: keyof FormData, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
     setError(null);
@@ -130,29 +143,18 @@ export default function RegisterPage() {
 
   const country = PHONE_COUNTRIES[phoneCountry];
 
-  // Build full E.164 phone: dial code + stripped digits
   const fullPhone = (): string => {
     let digits = form.phone.replace(/\D/g, "");
-    if (phoneCountry === "NG" && digits.startsWith("0")) {
+    if (phoneCountry === "NG" && digits.startsWith("0")) digits = digits.slice(1);
+    if (phoneCountry === "US" && digits.length === 11 && digits.startsWith("1"))
       digits = digits.slice(1);
-    }
-    if (phoneCountry === "US" && digits.length === 11 && digits.startsWith("1")) {
-      digits = digits.slice(1);
-    }
     return `${country.dial}${digits}`;
   };
 
-  // Validate phone number format for selected country
   const isValidPhoneFormat = (): boolean => {
     const digits = form.phone.replace(/\D/g, "");
-    if (phoneCountry === "NG") {
-      // Nigeria: 10-11 digits (with or without leading 0)
-      return digits.length === 10 || digits.length === 11;
-    }
-    if (phoneCountry === "US") {
-      // US: exactly 10 digits
-      return digits.length === 10;
-    }
+    if (phoneCountry === "NG") return digits.length === 10 || digits.length === 11;
+    if (phoneCountry === "US") return digits.length === 10;
     return false;
   };
 
@@ -161,21 +163,16 @@ export default function RegisterPage() {
     const digits = form.phone.replace(/\D/g, "");
     if (digits.length === 0) return null;
     if (!isValidPhoneFormat()) {
-      if (phoneCountry === "NG") {
-        return "Nigerian numbers must be 10–11 digits";
-      }
-      return "US numbers must be exactly 10 digits";
+      return phoneCountry === "NG"
+        ? "Nigerian numbers must be 10–11 digits"
+        : "US numbers must be exactly 10 digits";
     }
     return null;
   };
 
   const canAdvance = () => {
     if (step === 1)
-      return (
-        form.businessName.length > 1 &&
-        !!form.vendorType &&
-        form.location.length > 2
-      );
+      return form.businessName.length > 1 && !!form.vendorType && form.location.length > 2;
     if (step === 2) return form.community.length > 1;
     if (step === 3)
       return (
@@ -195,12 +192,11 @@ export default function RegisterPage() {
     location: form.location,
     community: form.community,
     ownerName: form.ownerName,
-    phone: fullPhone(), // always sent as +dialcode + digits
+    phone: fullPhone(),
     email: form.email.trim().toLowerCase(),
     password: form.password,
   });
 
-  // Step 3 → send OTP
   async function handleRequestOtp() {
     if (submitting.current) return;
     submitting.current = true;
@@ -225,7 +221,6 @@ export default function RegisterPage() {
     }
   }
 
-  // Step 4 → verify OTP + create account
   async function handleVerifyOtp() {
     const code = otp.join("");
     if (code.length !== 6 || submitting.current) return;
@@ -291,13 +286,12 @@ export default function RegisterPage() {
   function handleOtpPaste(e: React.ClipboardEvent) {
     e.preventDefault();
     const text = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-    const digits = text.split("");
     const next = [...otp];
-    digits.forEach((d, i) => {
+    text.split("").forEach((d, i) => {
       if (i < 6) next[i] = d;
     });
     setOtp(next);
-    otpRefs.current[Math.min(digits.length, 5)]?.focus();
+    otpRefs.current[Math.min(text.length, 5)]?.focus();
   }
 
   if (done)
@@ -309,645 +303,477 @@ export default function RegisterPage() {
       />
     );
 
+  const current = STEPS.find((s) => s.id === step);
+
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
-      {/* ── Left panel ──────────────────────────────────────────────────── */}
-      <div className="hidden md:flex flex-col w-[42%] min-h-screen bg-vodium-black relative overflow-hidden px-12 py-10 border-r border-white/[0.05]">
-        <div className="absolute inset-0 bg-dots opacity-30 pointer-events-none" />
-        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-vodium-gold/[0.04] rounded-full blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-vodium-gold/[0.03] rounded-full blur-[80px] pointer-events-none" />
-        <div className="absolute inset-0 bg-grid opacity-40 pointer-events-none" />
-        <Spotlight className="-top-60 left-0 opacity-20" />
+    <div className="marketing-page flex min-h-screen justify-center gap-16 px-6 py-8 pb-safe pt-safe xl:gap-24">
+      {/* Progress rail — wide screens only. Below xl the form's own bar and
+          the header brandmark do this job, and the rail would crowd them. */}
+      <aside
+        aria-label="Sign-up progress"
+        className="hidden w-64 shrink-0 py-2 xl:block"
+      >
+        <div className="sticky top-8">
+          <AuthStepPanel
+            steps={STEPS}
+            currentStep={step}
+            heading="Start tracking in minutes."
+            caption="Four short steps. Your first 60 days are free, and no card is needed."
+          />
+        </div>
+      </aside>
 
-        <Link href="/" className="relative z-10 flex items-center gap-3 group">
-          <div className="w-10 h-10 rounded-full bg-vodium-charcoal border border-vodium-gold/40 flex items-center justify-center group-hover:border-vodium-gold/70 transition-colors">
-            <span className="font-serif text-vodium-gold text-xl leading-none">
-              V
-            </span>
-          </div>
-          <span className="font-serif tracking-[0.18em] text-vodium-gold text-sm">
+      <div className="flex w-full max-w-md flex-col">
+      <header className="mx-auto flex w-full max-w-md items-center justify-between xl:hidden">
+        <Link href="/" className="inline-flex items-center gap-2.5">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-vodium-gold/30 bg-[color:var(--surface-2)]">
+            <span className="font-serif text-[15px] leading-none text-vodium-gold">V</span>
+          </span>
+          <span className="font-serif text-[13px] tracking-[0.16em] text-[color:var(--text-primary)]">
             VODIUM LEDGER
           </span>
         </Link>
-
-        <div className="flex-1 flex flex-col justify-center relative z-10">
-          <p className="text-vodium-gold text-xs tracking-[0.35em] uppercase mb-6">
-            For all vendors
-          </p>
-          <h2 className="font-serif text-4xl text-vodium-cream leading-tight mb-6">
-            Start tracking
-            <br />
-            credit in
-            <br />
-            <em className="text-gradient-gold not-italic">minutes.</em>
-          </h2>
-          <p className="text-vodium-cream/45 leading-relaxed max-w-sm text-sm mb-12">
-            Join hundreds of vendors who&rsquo;ve stopped losing money to
-            defaults. Set up your ledger in under 3 minutes no card needed.
-          </p>
-          <div className="space-y-4">
-            {[
-              {
-                icon: <Zap size={15} />,
-                label: "No card needed",
-                sub: "60-day free trial, cancel anytime",
-              },
-              {
-                icon: <MessageCircle size={15} />,
-                label: "WhatsApp-first",
-                sub: "Record credits right from WhatsApp",
-              },
-              {
-                icon: <Shield size={15} />,
-                label: "Private by design",
-                sub: "Customers only see their own balance",
-              },
-              {
-                icon: <TrendingUp size={15} />,
-                label: "Recover more",
-                sub: "Vendors recover 3× more on average",
-              },
-            ].map((b) => (
-              <div key={b.label} className="flex items-start gap-3">
-                <div className="w-7 h-7 rounded-lg bg-vodium-gold/10 border border-vodium-gold/20 flex items-center justify-center text-vodium-gold flex-shrink-0 mt-0.5">
-                  {b.icon}
-                </div>
-                <div>
-                  <p className="text-vodium-cream text-sm font-medium">
-                    {b.label}
-                  </p>
-                  <p className="text-vodium-cream/35 text-xs mt-0.5">{b.sub}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="relative z-10 border-t border-white/[0.07] pt-8">
-          <div className="grid grid-cols-3 gap-6">
-            {[
-              { value: "127+", label: "Active vendors" },
-              { value: "₦47M+", label: "Credit tracked" },
-              { value: "73%", label: "Repayment rate" },
-            ].map((s) => (
-              <div key={s.label}>
-                <p className="font-serif text-2xl text-vodium-gold">
-                  {s.value}
-                </p>
-                <p className="text-vodium-cream/35 text-xs mt-0.5">{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Right panel — form ───────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col bg-vodium-cream min-h-screen px-8 py-10 md:px-14">
-        <Link href="/" className="flex items-center gap-3 md:hidden mb-10">
-          <div className="w-9 h-9 rounded-full bg-vodium-black border border-vodium-gold/40 flex items-center justify-center">
-            <span className="font-serif text-vodium-gold text-lg">V</span>
-          </div>
-          <span className="font-serif tracking-[0.18em] text-vodium-black text-sm">
-            VODIUM LEDGER
-          </span>
+        <Link
+          href="/login"
+          className="text-[13px] text-[color:var(--text-tertiary)] transition-colors hover:text-[color:var(--text-primary)]"
+        >
+          Sign in
         </Link>
+      </header>
 
-        <div className="hidden md:flex justify-end mb-6">
-          <Link
-            href="/login"
-            className="text-sm text-vodium-black/50 hover:text-vodium-black transition-colors"
-          >
-            Already have an account?{" "}
-            <span className="text-vodium-black font-semibold hover:text-vodium-gold transition-colors">
-              Sign in
-            </span>
-          </Link>
-        </div>
-
-        <div className="flex-1 flex flex-col justify-center">
-          <div className="max-w-sm mx-auto w-full">
-            {/* Step progress */}
-            <div className="flex items-center gap-2 mb-10">
-              {STEPS.map((s) => (
-                <div
-                  key={s.id}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
-                    step >= s.id
-                      ? "bg-vodium-gold w-8"
-                      : "bg-vodium-black/10 w-4"
-                  }`}
-                />
-              ))}
-            </div>
-
-            {/* ── Step 1: Business info ─────────────────────────────── */}
-            {step === 1 && (
-              <div className="animate-fade-up">
-                <div className="mb-7">
-                  <div className="w-11 h-11 rounded-2xl bg-vodium-gold/10 border border-vodium-gold/25 flex items-center justify-center mb-5">
-                    <Store size={20} className="text-vodium-gold" />
-                  </div>
-                  <h1 className="font-serif text-3xl text-vodium-black mb-2">
-                    Tell us about your shop
-                  </h1>
-                  <p className="text-muted-foreground text-sm">
-                    This is how your business will appear to customers.
-                  </p>
-                </div>
-                <div className="space-y-4">
-                  <Field label="Business name" required>
-                    <input
-                      type="text"
-                      placeholder="e.g. Mama Taiwo's Provisions"
-                      value={form.businessName}
-                      onChange={(e) => update("businessName", e.target.value)}
-                      className="input-premium"
-                      autoFocus
-                    />
-                  </Field>
-                  <Field label="Type of business" required>
-                    <div className="grid grid-cols-3 gap-2">
-                      {VENDOR_TYPES.map((t) => {
-                        const Icon = t.icon;
-                        const sel = form.vendorType === t.value;
-                        return (
-                          <button
-                            key={t.value}
-                            type="button"
-                            onClick={() => update("vendorType", t.value)}
-                            className={`flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border text-center transition-all ${
-                              sel
-                                ? "border-vodium-gold bg-vodium-gold/8 text-vodium-black shadow-[0_0_0_1px_rgba(201,169,97,0.3)]"
-                                : "border-border text-muted-foreground hover:border-vodium-gold/40 hover:text-vodium-black"
-                            }`}
-                          >
-                            <Icon
-                              size={16}
-                              className={
-                                sel
-                                  ? "text-vodium-gold"
-                                  : "text-muted-foreground"
-                              }
-                            />
-                            <span className="text-[10px] font-medium leading-tight">
-                              {t.label}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </Field>
-                  <Field
-                    label="Business location"
-                    required
-                    hint="Where can customers find you?"
-                  >
-                    <div className="relative">
-                      <MapPin
-                        size={15}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-                      />
-                      <input
-                        type="text"
-                        placeholder="e.g. Shop 12, Yaba Market"
-                        value={form.location}
-                        onChange={(e) =>
-                          update("location", e.target.value)
-                        }
-                        className="input-premium pl-9"
-                      />
-                    </div>
-                  </Field>
-                </div>
-              </div>
-            )}
-
-            {/* ── Step 2: Community (free-text) ───────────────────── */}
-            {step === 2 && (
-              <div className="animate-fade-up">
-                <div className="mb-7">
-                  <div className="w-11 h-11 rounded-2xl bg-vodium-gold/10 border border-vodium-gold/25 flex items-center justify-center mb-5">
-                    <Building2 size={20} className="text-vodium-gold" />
-                  </div>
-                  <h1 className="font-serif text-3xl text-vodium-black mb-2">
-                    Which community?
-                  </h1>
-                  <p className="text-muted-foreground text-sm">
-                    Type your community, market, area, or institution name.
-                  </p>
-                </div>
-
-                <Field
-                  label="Community / market name"
-                  required
-                  hint="e.g. Yaba, Balogun Market, Victoria Island, UNILAG"
-                >
-                  <div className="relative">
-                    <Building2
-                      size={15}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-                    />
-                    <input
-                      type="text"
-                      placeholder="e.g. Yaba or Victoria Island"
-                      value={form.community}
-                      onChange={(e) => update("community", e.target.value)}
-                      className="input-premium pl-9"
-                      autoFocus
-                      autoComplete="off"
-                    />
-                  </div>
-                </Field>
-
-                {/* Live normalisation preview — shows exactly what will be stored */}
-                {form.community.trim().length > 1 && (
-                  <div className="mt-3 flex items-center gap-2 px-3.5 py-2.5 bg-vodium-gold/5 border border-vodium-gold/20 rounded-xl">
-                    <CheckCircle
-                      size={13}
-                      className="text-vodium-gold flex-shrink-0"
-                    />
-                    <p className="text-xs text-vodium-black/60">
-                      Will be saved as{" "}
-                      <span className="font-semibold text-vodium-black font-mono">
-                        {form.community
-                          .trim()
-                          .replace(/\s+/g, " ")
-                          .toLowerCase()}
-                      </span>
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── Step 3: Contact + password ────────────────────────── */}
-            {step === 3 && (
-              <div className="animate-fade-up">
-                <div className="mb-7">
-                  <div className="w-11 h-11 rounded-2xl bg-vodium-gold/10 border border-vodium-gold/25 flex items-center justify-center mb-5">
-                    <Phone size={20} className="text-vodium-gold" />
-                  </div>
-                  <h1 className="font-serif text-3xl text-vodium-black mb-2">
-                    Your details
-                  </h1>
-                  <p className="text-muted-foreground text-sm">
-                    Set up your login credentials.
-                  </p>
-                </div>
-                <div className="space-y-4">
-                  <Field label="Your full name" required>
-                    <input
-                      type="text"
-                      placeholder="e.g. Taiwo Adeyemi"
-                      value={form.ownerName}
-                      onChange={(e) => update("ownerName", e.target.value)}
-                      className="input-premium"
-                      autoFocus
-                    />
-                  </Field>
-
-                  <Field
-                    label="WhatsApp phone number"
-                    required
-                    hint={country.hint}
-                  >
-                    <div className="relative">
-                      <div className="flex">
-                        {/* Country selector */}
-                        <div className="relative flex-shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setCountryOpen((v) => !v)}
-                            className="flex items-center gap-1.5 px-3 h-full bg-white border-y border-l border-border rounded-l-[10px] border-r-0 hover:bg-vodium-gold/5 transition-colors min-w-[88px]"
-                          >
-                            <span className="text-base leading-none select-none">
-                              {country.flag}
-                            </span>
-                            <span className="text-sm text-vodium-black/70 font-semibold">
-                              {country.dial}
-                            </span>
-                            <ChevronDown
-                              size={12}
-                              className={`text-vodium-black/35 transition-transform ${countryOpen ? "rotate-180" : ""}`}
-                            />
-                          </button>
-
-                          {/* Dropdown */}
-                          {countryOpen && (
-                            <div className="absolute top-full left-0 mt-1 z-20 w-48 bg-white border border-border rounded-xl shadow-lg overflow-hidden">
-                              {(
-                                Object.entries(PHONE_COUNTRIES) as [
-                                  PhoneCountry,
-                                  typeof country,
-                                ][]
-                              ).map(([code, c]) => (
-                                <button
-                                  key={code}
-                                  type="button"
-                                  onClick={() => {
-                                    setPhoneCountry(code);
-                                    setCountryOpen(false);
-                                    update("phone", "");
-                                  }}
-                                  className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-colors ${
-                                    phoneCountry === code
-                                      ? "bg-vodium-gold/10 text-vodium-black font-semibold"
-                                      : "hover:bg-vodium-gold/5 text-vodium-black/70"
-                                  }`}
-                                >
-                                  <span className="text-lg leading-none">
-                                    {c.flag}
-                                  </span>
-                                  <div className="text-left">
-                                    <p className="font-medium text-xs">
-                                      {code === "NG"
-                                        ? "Nigeria"
-                                        : "United States"}
-                                    </p>
-                                    <p className="text-[10px] text-muted-foreground">
-                                      {c.dial}
-                                    </p>
-                                  </div>
-                                  {phoneCountry === code && (
-                                    <span className="ml-auto text-vodium-gold text-xs">
-                                      ✓
-                                    </span>
-                                  )}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Number input */}
-                        <input
-                          type="tel"
-                          inputMode="tel"
-                          placeholder={country.placeholder}
-                          value={form.phone}
-                          onChange={(e) => {
-                            update("phone", e.target.value);
-                            setCountryOpen(false);
-                          }}
-                          className="input-premium rounded-l-none border-l-0 focus:z-10 flex-1"
-                          style={{ borderRadius: "0 10px 10px 0" }}
-                        />
-                      </div>
-
-                      {/* Preview of stored number or validation error */}
-                      {form.phone.replace(/\D/g, "").length > 0 && (
-                        <>
-                          {getPhoneError() ? (
-                            <p className="text-[11px] text-danger mt-1.5 flex items-center gap-1">
-                              ⚠ {getPhoneError()}
-                            </p>
-                          ) : (
-                            form.phone.replace(/\D/g, "").length >=
-                              country.minDigits && (
-                              <p className="text-[11px] text-vodium-black/40 mt-1.5 flex items-center gap-1">
-                                <Phone size={10} />
-                                Will be stored as{" "}
-                                <span className="font-mono font-medium text-vodium-black/60">
-                                  {fullPhone()}
-                                </span>
-                              </p>
-                            )
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </Field>
-
-                  <Field label="Email address" required>
-                    <div className="relative">
-                      <Mail
-                        size={15}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-                      />
-                      <input
-                        type="email"
-                        autoComplete="email"
-                        placeholder="you@example.com"
-                        value={form.email}
-                        onChange={(e) => update("email", e.target.value)}
-                        className="input-premium pl-9"
-                      />
-                    </div>
-                  </Field>
-
-                  <Field label="Password" required hint="Minimum 8 characters.">
-                    <div className="relative">
-                      <Lock
-                        size={15}
-                        className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-                      />
-                      <input
-                        type={showPassword ? "text" : "password"}
-                        autoComplete="new-password"
-                        placeholder="••••••••"
-                        value={form.password}
-                        onChange={(e) => update("password", e.target.value)}
-                        className="input-premium pl-9 pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((v) => !v)}
-                        className="absolute right-6 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-vodium-black transition-colors"
-                      >
-                        {showPassword ? (
-                          <EyeOff size={15} />
-                        ) : (
-                          <Eye size={15} />
-                        )}
-                      </button>
-                    </div>
-                    {form.password.length > 0 && form.password.length < 8 && (
-                      <p className="text-xs text-danger mt-1.5">
-                        Password too short needs {8 - form.password.length} more
-                        character
-                        {8 - form.password.length !== 1 ? "s" : ""}.
-                      </p>
-                    )}
-                  </Field>
-                </div>
-              </div>
-            )}
-
-            {/* ── Step 4: OTP verification ──────────────────────────── */}
-            {step === 4 && (
-              <div className="animate-fade-up">
-                <div className="mb-7">
-                  <div className="w-11 h-11 rounded-2xl bg-vodium-gold/10 border border-vodium-gold/25 flex items-center justify-center mb-5">
-                    <Shield size={20} className="text-vodium-gold" />
-                  </div>
-                  <h1 className="font-serif text-3xl text-vodium-black mb-2">
-                    Verify your email
-                  </h1>
-                  <p className="text-muted-foreground text-sm">
-                    We sent a 6-digit code to{" "}
-                    <span className="text-vodium-black font-semibold">
-                      {form.email}
-                    </span>
-                    .
-                    <br />
-                    It expires in 10 minutes.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-vodium-black mb-3">
-                    Verification code
-                  </label>
-                  <div className="flex gap-2">
-                    {otp.map((digit, i) => (
-                      <input
-                        key={i}
-                        ref={(el) => {
-                          otpRefs.current[i] = el;
-                        }}
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={1}
-                        value={digit}
-                        onChange={(e) => handleOtpInput(i, e.target.value)}
-                        onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                        onPaste={handleOtpPaste}
-                        className={`w-full aspect-square text-center text-xl font-bold border rounded-xl transition-all outline-none
-                          ${digit ? "border-vodium-gold bg-vodium-gold/5 text-vodium-black" : "border-border bg-white text-vodium-black"}
-                          focus:border-vodium-gold focus:ring-2 focus:ring-vodium-gold/20`}
-                      />
-                    ))}
-                  </div>
-
-                  <div className="mt-4 text-center">
-                    <button
-                      type="button"
-                      onClick={handleResendOtp}
-                      disabled={resendCooldown > 0 || resending}
-                      className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-vodium-black transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                    >
-                      <RefreshCw
-                        size={14}
-                        className={resending ? "animate-spin" : ""}
-                      />
-                      {resendCooldown > 0
-                        ? `Resend in ${resendCooldown}s`
-                        : "Resend code"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Error */}
-            {error && (
-              <div className="mt-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-danger flex items-start gap-2">
-                <span className="flex-shrink-0 mt-0.5">⚠</span>
-                <span>{error}</span>
-              </div>
-            )}
-
-            {/* Navigation */}
-            <div className="flex items-center justify-between mt-8 pt-6 border-t border-border">
-              {step > 1 && step < 4 ? (
-                <button
-                  onClick={() => {
-                    setStep(step - 1);
-                    setError(null);
-                  }}
-                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-vodium-black transition-colors"
-                >
-                  <ArrowLeft size={16} /> Back
-                </button>
-              ) : step === 4 ? (
-                <button
-                  onClick={() => {
-                    setStep(3);
-                    setOtp(["", "", "", "", "", ""]);
-                    setError(null);
-                  }}
-                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-vodium-black transition-colors"
-                >
-                  <ArrowLeft size={16} /> Back
-                </button>
-              ) : (
-                <Link
-                  href="/"
-                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-vodium-black transition-colors"
-                >
-                  <ArrowLeft size={16} /> Back to home
-                </Link>
-              )}
-
-              {step < 3 && (
-                <ShimmerButton
-                  onClick={() => canAdvance() && setStep(step + 1)}
-                  className={`px-6 h-11 text-sm gap-2 ${!canAdvance() ? "opacity-40 pointer-events-none" : ""}`}
-                >
-                  Continue <ArrowRight size={15} />
-                </ShimmerButton>
-              )}
-
-              {step === 3 && (
-                <ShimmerButton
-                  onClick={handleRequestOtp}
-                  className={`px-6 h-11 text-sm gap-2 ${!canAdvance() || loading ? "opacity-40 pointer-events-none" : ""}`}
-                >
-                  {loading ? (
-                    "Sending code…"
-                  ) : (
-                    <>
-                      <span>Continue</span> <ArrowRight size={15} />
-                    </>
-                  )}
-                </ShimmerButton>
-              )}
-
-              {step === 4 && (
-                <ShimmerButton
-                  onClick={handleVerifyOtp}
-                  className={`px-6 h-11 text-sm gap-2 ${!canAdvance() || loading ? "opacity-40 pointer-events-none" : ""}`}
-                >
-                  {loading ? (
-                    "Creating account…"
-                  ) : (
-                    <>
-                      <span>Create account</span> <ArrowRight size={15} />
-                    </>
-                  )}
-                </ShimmerButton>
-              )}
-            </div>
-
-            <p className="mt-8 text-center text-sm text-muted-foreground md:hidden">
-              Already have an account?{" "}
-              <Link
-                href="/login"
-                className="text-vodium-black font-semibold hover:text-vodium-gold transition-colors"
-              >
-                Sign in
-              </Link>
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-10">
+        {/* Step indicator. The bare bar told you progress but not where you
+            were; the label makes the wizard's length explicit up front.
+            Hidden at xl, where the rail beside the form says the same thing
+            with room to name every step. */}
+        <div className="mb-8 xl:hidden">
+          <div className="mb-2.5 flex items-center justify-between">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-quaternary)]">
+              {current?.label}
+            </p>
+            <p className="tnum text-[11px] text-[color:var(--text-quaternary)]">
+              Step {step} of {STEPS.length}
             </p>
           </div>
+          <div
+            className="flex gap-1.5"
+            role="progressbar"
+            aria-valuenow={step}
+            aria-valuemin={1}
+            aria-valuemax={STEPS.length}
+            aria-label="Sign-up progress"
+          >
+            {STEPS.map((s) => (
+              <span
+                key={s.id}
+                className={`h-1 flex-1 rounded-full transition-colors duration-200 ${
+                  step >= s.id ? "bg-vodium-gold" : "bg-[color:var(--surface-3)]"
+                }`}
+              />
+            ))}
+          </div>
         </div>
 
-        <p className="text-center text-xs text-muted-foreground mt-8">
+        {step === 1 && (
+          <div>
+            <h1 className="font-serif text-[26px] leading-tight text-[color:var(--text-primary)]">
+              Tell us about your shop
+            </h1>
+            <p className="mt-2 text-[14px] text-[color:var(--text-tertiary)]">
+              This is how your business will appear to customers.
+            </p>
+
+            <div className="mt-7 space-y-5">
+              <Field label="Business name" htmlFor="businessName" required>
+                <input
+                  id="businessName"
+                  type="text"
+                  placeholder="e.g. Mama Taiwo's Provisions"
+                  value={form.businessName}
+                  onChange={(e) => update("businessName", e.target.value)}
+                  className="input-dark"
+                  autoFocus
+                />
+              </Field>
+
+              <fieldset>
+                <legend className="mb-1.5 text-[13px] font-medium text-[color:var(--text-secondary)]">
+                  Type of business <span className="text-[#F0736B]">*</span>
+                </legend>
+                <div className="grid grid-cols-3 gap-2">
+                  {VENDOR_TYPES.map((t) => {
+                    const Icon = t.icon;
+                    const sel = form.vendorType === t.value;
+                    return (
+                      <button
+                        key={t.value}
+                        type="button"
+                        onClick={() => update("vendorType", t.value)}
+                        aria-pressed={sel}
+                        className={`flex flex-col items-center gap-2 rounded-lg border px-2 py-3 text-center transition-colors ${
+                          sel
+                            ? "border-vodium-gold/50 bg-vodium-gold/[0.07] text-[color:var(--text-primary)]"
+                            : "border-[color:var(--hairline)] bg-[color:var(--surface-1)] text-[color:var(--text-tertiary)] hover:border-[color:var(--hairline-strong)]"
+                        }`}
+                      >
+                        <Icon
+                          size={16}
+                          className={sel ? "text-vodium-gold" : "text-[color:var(--text-quaternary)]"}
+                        />
+                        <span className="text-[10px] font-medium leading-tight">{t.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+
+              <Field
+                label="Business location"
+                htmlFor="location"
+                required
+                hint="Where can customers find you?"
+              >
+                <input
+                  id="location"
+                  type="text"
+                  placeholder="e.g. Shop 12, Yaba Market"
+                  value={form.location}
+                  onChange={(e) => update("location", e.target.value)}
+                  className="input-dark"
+                />
+              </Field>
+            </div>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div>
+            <h1 className="font-serif text-[26px] leading-tight text-[color:var(--text-primary)]">
+              Which community?
+            </h1>
+            <p className="mt-2 text-[14px] text-[color:var(--text-tertiary)]">
+              Your community, market, area or institution name.
+            </p>
+
+            <div className="mt-7">
+              <Field
+                label="Community or market"
+                htmlFor="community"
+                required
+                hint="e.g. Yaba, Balogun Market, Victoria Island, UNILAG"
+              >
+                <input
+                  id="community"
+                  type="text"
+                  placeholder="e.g. Yaba or Victoria Island"
+                  value={form.community}
+                  onChange={(e) => update("community", e.target.value)}
+                  className="input-dark"
+                  autoFocus
+                  autoComplete="off"
+                />
+              </Field>
+
+              {form.community.trim().length > 1 && (
+                <p className="mt-3 flex items-center gap-2 rounded-lg border border-[color:var(--hairline)] bg-[color:var(--surface-1)] px-3.5 py-2.5 text-[12px] text-[color:var(--text-tertiary)]">
+                  <CheckCircle size={13} className="shrink-0 text-vodium-gold" />
+                  Saved as{" "}
+                  <span className="font-mono text-[color:var(--text-primary)]">
+                    {form.community.trim().replace(/\s+/g, " ").toLowerCase()}
+                  </span>
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div>
+            <h1 className="font-serif text-[26px] leading-tight text-[color:var(--text-primary)]">
+              Your details
+            </h1>
+            <p className="mt-2 text-[14px] text-[color:var(--text-tertiary)]">
+              Set up your login credentials.
+            </p>
+
+            <div className="mt-7 space-y-5">
+              <Field label="Your full name" htmlFor="ownerName" required>
+                <input
+                  id="ownerName"
+                  type="text"
+                  placeholder="e.g. Taiwo Adeyemi"
+                  value={form.ownerName}
+                  onChange={(e) => update("ownerName", e.target.value)}
+                  className="input-dark"
+                  autoFocus
+                />
+              </Field>
+
+              <Field label="WhatsApp number" htmlFor="phone" required hint={country.hint}>
+                <div className="flex">
+                  <div ref={countryRef} className="relative shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setCountryOpen((v) => !v)}
+                      aria-haspopup="listbox"
+                      aria-expanded={countryOpen}
+                      className="flex h-full min-w-[92px] items-center gap-1.5 rounded-l-lg border border-r-0 border-[color:var(--hairline-strong)] bg-[color:var(--surface-2)] px-3 transition-colors hover:bg-[color:var(--surface-3)]"
+                    >
+                      <span className="select-none text-[15px] leading-none">{country.flag}</span>
+                      <span className="tnum text-[14px] text-[color:var(--text-secondary)]">
+                        {country.dial}
+                      </span>
+                      <ChevronDown
+                        size={12}
+                        className={`text-[color:var(--text-quaternary)] transition-transform ${
+                          countryOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {countryOpen && (
+                      <ul
+                        role="listbox"
+                        className="absolute left-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-lg border border-[color:var(--hairline-strong)] bg-[color:var(--surface-2)] shadow-[var(--elev-2)]"
+                      >
+                        {(Object.entries(PHONE_COUNTRIES) as [PhoneCountry, typeof country][]).map(
+                          ([code, c]) => (
+                            <li key={code}>
+                              <button
+                                type="button"
+                                role="option"
+                                aria-selected={phoneCountry === code}
+                                onClick={() => {
+                                  setPhoneCountry(code);
+                                  setCountryOpen(false);
+                                  update("phone", "");
+                                }}
+                                className={`flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors ${
+                                  phoneCountry === code
+                                    ? "bg-vodium-gold/10 text-[color:var(--text-primary)]"
+                                    : "text-[color:var(--text-secondary)] hover:bg-[color:var(--surface-3)]"
+                                }`}
+                              >
+                                <span className="text-[16px] leading-none">{c.flag}</span>
+                                <span className="text-[13px]">{c.name}</span>
+                                <span className="tnum ml-auto text-[12px] text-[color:var(--text-quaternary)]">
+                                  {c.dial}
+                                </span>
+                              </button>
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    )}
+                  </div>
+
+                  <input
+                    id="phone"
+                    type="tel"
+                    inputMode="tel"
+                    placeholder={country.placeholder}
+                    value={form.phone}
+                    onChange={(e) => update("phone", e.target.value)}
+                    aria-invalid={!!getPhoneError()}
+                    className="input-dark flex-1 rounded-l-none"
+                  />
+                </div>
+
+                {form.phone.replace(/\D/g, "").length > 0 &&
+                  (getPhoneError() ? (
+                    <p role="alert" className="mt-1.5 text-[12px] text-[#F0736B]">
+                      {getPhoneError()}
+                    </p>
+                  ) : (
+                    <p className="mt-1.5 text-[12px] text-[color:var(--text-quaternary)]">
+                      Stored as{" "}
+                      <span className="tnum text-[color:var(--text-tertiary)]">{fullPhone()}</span>
+                    </p>
+                  ))}
+              </Field>
+
+              <Field label="Email address" htmlFor="email" required>
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  value={form.email}
+                  onChange={(e) => update("email", e.target.value)}
+                  className="input-dark"
+                />
+              </Field>
+
+              <Field label="Password" htmlFor="password" required hint="Minimum 8 characters.">
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    placeholder="••••••••"
+                    value={form.password}
+                    onChange={(e) => update("password", e.target.value)}
+                    className="input-dark pr-11"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--text-quaternary)] transition-colors hover:text-[color:var(--text-primary)]"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {form.password.length > 0 && form.password.length < 8 && (
+                  <p className="mt-1.5 text-[12px] text-[#F0736B]">
+                    {8 - form.password.length} more character
+                    {8 - form.password.length !== 1 ? "s" : ""} needed.
+                  </p>
+                )}
+              </Field>
+            </div>
+          </div>
+        )}
+
+        {step === 4 && (
+          <div>
+            <h1 className="font-serif text-[26px] leading-tight text-[color:var(--text-primary)]">
+              Verify your email
+            </h1>
+            <p className="mt-2 text-[14px] leading-relaxed text-[color:var(--text-tertiary)]">
+              We sent a 6-digit code to{" "}
+              <span className="text-[color:var(--text-primary)]">{form.email}</span>. It expires
+              in 10 minutes.
+            </p>
+
+            <fieldset className="mt-7">
+              <legend className="mb-3 text-[13px] font-medium text-[color:var(--text-secondary)]">
+                Verification code
+              </legend>
+              <div className="flex gap-2">
+                {otp.map((digit, i) => (
+                  <input
+                    key={i}
+                    ref={(el) => {
+                      otpRefs.current[i] = el;
+                    }}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete={i === 0 ? "one-time-code" : "off"}
+                    aria-label={`Digit ${i + 1} of 6`}
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleOtpInput(i, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                    onPaste={handleOtpPaste}
+                    className={`tnum aspect-square w-full rounded-lg border bg-[color:var(--surface-1)] text-center text-[18px] text-[color:var(--text-primary)] outline-none transition-colors ${
+                      digit ? "border-vodium-gold/50" : "border-[color:var(--hairline-strong)]"
+                    } focus:border-vodium-gold`}
+                  />
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                disabled={resendCooldown > 0 || resending}
+                className="inline-flex items-center gap-2 text-[13px] text-[color:var(--text-tertiary)] transition-colors hover:text-[color:var(--text-primary)] disabled:pointer-events-none disabled:opacity-40"
+              >
+                <RefreshCw size={14} className={resending ? "animate-spin" : ""} />
+                {resendCooldown > 0 ? (
+                  <span className="tnum">Resend in {resendCooldown}s</span>
+                ) : (
+                  "Resend code"
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <p
+            role="alert"
+            className="mt-5 rounded-lg border border-[#E5534B]/25 bg-[#E5534B]/10 px-3.5 py-2.5 text-[13px] text-[#F0736B]"
+          >
+            {error}
+          </p>
+        )}
+
+        <div className="mt-8 flex items-center justify-between border-t border-[color:var(--hairline)] pt-6">
+          {step > 1 ? (
+            <button
+              type="button"
+              onClick={() => {
+                setStep(step - 1);
+                if (step === 4) setOtp(["", "", "", "", "", ""]);
+                setError(null);
+              }}
+              className="inline-flex items-center gap-2 text-[13px] text-[color:var(--text-tertiary)] transition-colors hover:text-[color:var(--text-primary)]"
+            >
+              <ArrowLeft size={15} /> Back
+            </button>
+          ) : (
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-[13px] text-[color:var(--text-tertiary)] transition-colors hover:text-[color:var(--text-primary)]"
+            >
+              <ArrowLeft size={15} /> Home
+            </Link>
+          )}
+
+          {step < 3 && (
+            <ShimmerButton
+              onClick={() => canAdvance() && setStep(step + 1)}
+              disabled={!canAdvance()}
+              className="gap-2"
+            >
+              Continue <ArrowRight size={15} />
+            </ShimmerButton>
+          )}
+          {step === 3 && (
+            <ShimmerButton
+              onClick={handleRequestOtp}
+              disabled={!canAdvance() || loading}
+              className="gap-2"
+            >
+              {loading ? "Sending code…" : <>Continue <ArrowRight size={15} /></>}
+            </ShimmerButton>
+          )}
+          {step === 4 && (
+            <ShimmerButton
+              onClick={handleVerifyOtp}
+              disabled={!canAdvance() || loading}
+              className="gap-2"
+            >
+              {loading ? "Creating account…" : "Create account"}
+            </ShimmerButton>
+          )}
+        </div>
+      </main>
+
+      {/* These were href="#" — a consent line that links nowhere is worse than
+          no link, since it is the record of what the vendor agreed to. */}
+      <footer className="mx-auto w-full max-w-md text-center">
+        <p className="text-[12px] leading-relaxed text-[color:var(--text-quaternary)]">
           By creating an account you agree to Vodium&rsquo;s{" "}
-          <a
-            href="#"
-            className="underline underline-offset-2 hover:text-vodium-black transition-colors"
+          <Link
+            href="/terms"
+            className="underline underline-offset-2 transition-colors hover:text-[color:var(--text-secondary)]"
           >
             Terms
-          </a>{" "}
+          </Link>{" "}
           and{" "}
-          <a
-            href="#"
-            className="underline underline-offset-2 hover:text-vodium-black transition-colors"
+          <Link
+            href="/privacy"
+            className="underline underline-offset-2 transition-colors hover:text-[color:var(--text-secondary)]"
           >
             Privacy Policy
-          </a>
+          </Link>
           .
         </p>
+      </footer>
       </div>
     </div>
   );
@@ -955,22 +781,29 @@ export default function RegisterPage() {
 
 function Field({
   label,
+  htmlFor,
   required,
   hint,
   children,
 }: {
   label: string;
+  htmlFor: string;
   required?: boolean;
   hint?: string;
   children: React.ReactNode;
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-vodium-black mb-1.5">
-        {label} {required && <span className="text-danger">*</span>}
+      <label
+        htmlFor={htmlFor}
+        className="mb-1.5 block text-[13px] font-medium text-[color:var(--text-secondary)]"
+      >
+        {label} {required && <span className="text-[#F0736B]">*</span>}
       </label>
       {children}
-      {hint && <p className="text-xs text-muted-foreground mt-1.5">{hint}</p>}
+      {hint && (
+        <p className="mt-1.5 text-[12px] text-[color:var(--text-quaternary)]">{hint}</p>
+      )}
     </div>
   );
 }
@@ -987,35 +820,32 @@ function SuccessScreen({
   const firstName = name.split(" ")[0];
   const waPhone = "+2347019575717";
   return (
-    <div className="min-h-screen bg-vodium-black flex items-center justify-center px-6 py-12">
-      <div className="max-w-md w-full text-center">
-        <div className="w-20 h-20 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto mb-8">
-          <CheckCircle size={36} className="text-emerald-400" />
-        </div>
-        <p className="text-vodium-gold text-xs tracking-[0.3em] uppercase mb-4">
-          You&rsquo;re in
-        </p>
-        <h1 className="font-serif text-4xl text-vodium-cream mb-4">
-          Welcome, {firstName}!
+    <div className="marketing-page flex min-h-screen items-center justify-center px-6 py-12">
+      <div className="w-full max-w-sm text-center">
+        <span className="mx-auto mb-7 flex h-14 w-14 items-center justify-center rounded-full border border-[#3FB950]/25 bg-[#3FB950]/10">
+          <CheckCircle size={26} className="text-[#56C963]" />
+        </span>
+        <h1 className="font-serif text-[28px] leading-tight text-[color:var(--text-primary)]">
+          Welcome, {firstName}
         </h1>
-        <p className="text-vodium-cream/50 mb-10 leading-relaxed">
-          <span className="text-vodium-cream font-semibold">{business}</span> is
-          now on Vodium Ledger. Your 60-day free trial has started.
+        <p className="mt-3 text-[14px] leading-relaxed text-[color:var(--text-tertiary)]">
+          <span className="text-[color:var(--text-primary)]">{business}</span> is now on Vodium
+          Ledger. Your 60-day free trial has started.
         </p>
-        <div className="space-y-3">
+        <div className="mt-8 space-y-3">
           <a
             href={`https://wa.me/${waPhone.replace("+", "")}?text=START`}
             target="_blank"
             rel="noopener noreferrer"
-            className="btn-gold w-full py-4 rounded-xl inline-flex items-center justify-center gap-2 text-base"
+            className="btn-gold inline-flex w-full items-center justify-center gap-2 rounded-lg py-3 text-[14px]"
           >
-            <MessageCircle size={20} /> Activate WhatsApp bot
+            <MessageCircle size={17} /> Activate WhatsApp bot
           </a>
           <button
             onClick={onDashboard}
-            className="btn-ghost w-full py-4 rounded-xl inline-flex items-center justify-center gap-2 text-base"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-[color:var(--hairline-strong)] py-3 text-[14px] font-medium text-[color:var(--text-secondary)] transition-colors hover:border-[color:var(--text-quaternary)] hover:text-[color:var(--text-primary)]"
           >
-            Go to my dashboard <ArrowRight size={18} />
+            Go to my dashboard <ArrowRight size={16} />
           </button>
         </div>
       </div>

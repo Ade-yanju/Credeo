@@ -217,9 +217,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             rel="noopener noreferrer"
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-vodium-cream/30 hover:text-vodium-cream/70 hover:bg-white/[0.03] border border-transparent transition-all duration-150"
           >
-            <MessageCircle size={16} className="flex-shrink-0 text-emerald-500/50" />
+            <MessageCircle size={16} className="flex-shrink-0 text-[#3FB950]/60" />
             <span className="flex-1">WhatsApp bot</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/60 flex-shrink-0 animate-pulse" />
+            {/* Static status dot. A permanent pulse reads as an unread alert. */}
+            <span className="w-1.5 h-1.5 rounded-full bg-[#3FB950]/70 flex-shrink-0" />
           </a>
         </div>
 
@@ -284,9 +285,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen bg-[#0D0D0D] flex">
+    <div className="flex min-h-screen bg-[color:var(--surface-0)]">
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-60 flex-col bg-[#080808] border-r border-white/[0.05] fixed inset-y-0 left-0 z-30 pt-safe pb-safe pl-safe">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-[color:var(--hairline)] bg-[#08080A] pb-safe pl-safe pt-safe md:flex">
         <SidebarContent />
       </aside>
 
@@ -333,7 +334,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main */}
       <div className="flex-1 min-w-0 md:ml-60 flex flex-col min-h-screen">
         {/* Sticky header */}
-        <header className="sticky top-0 z-20 bg-[#0A0A0A]/95 backdrop-blur-xl border-b border-white/[0.05] px-5 min-h-[3.5rem] pt-safe flex items-center justify-between">
+        <header className="sticky top-0 z-20 flex min-h-[3.5rem] items-center justify-between border-b border-[color:var(--hairline)] bg-[color:var(--surface-0)]/90 px-5 pt-safe backdrop-blur-xl">
           {/* Left: hamburger + breadcrumb */}
           <div className="flex items-center gap-3">
             <button

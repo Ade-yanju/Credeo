@@ -1,33 +1,38 @@
-"use client";
-import { useRef, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 
-export function MagicCard({ children, className, gradientColor = "rgba(201,169,97,0.15)" }: { children: React.ReactNode; className?: string; gradientColor?: string }) {
-  const divRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const [opacity, setOpacity] = useState(0);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!divRef.current) return;
-    const rect = divRef.current.getBoundingClientRect();
-    setPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-  }, []);
-
+/**
+ * Content card on the marketing surface.
+ *
+ * The cursor-following radial gradient is gone. It was a per-card mousemove
+ * listener driving a React state update on every pointer event — a measurable
+ * cost across a grid of nine cards, spent on an effect that says "look what
+ * this page can do" rather than making anything easier to read.
+ *
+ * Now a static surface with a hairline that warms slightly on hover, matching
+ * the dashboard's `.surface-card`. Dropping the mousemove handler also lets
+ * this be a server component: the "use client" directive and the useState /
+ * useRef / useCallback imports are no longer needed.
+ *
+ * `gradientColor` is retained as an accepted-and-ignored prop so the existing
+ * call sites in about/blog/careers keep type-checking.
+ */
+export function MagicCard({
+  children,
+  className,
+  gradientColor: _gradientColor,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  gradientColor?: string;
+}) {
   return (
     <div
-      ref={divRef}
-      onMouseMove={handleMouseMove}
-      onMouseEnter={() => setOpacity(1)}
-      onMouseLeave={() => setOpacity(0)}
-      className={cn("relative overflow-hidden rounded-2xl border border-white/[0.06] bg-vodium-charcoal", className)}
+      className={cn(
+        "relative rounded-xl border border-[color:var(--hairline)] bg-[color:var(--surface-1)]",
+        "transition-colors duration-150 hover:border-[color:var(--hairline-strong)]",
+        className,
+      )}
     >
-      <div
-        className="pointer-events-none absolute inset-0 transition-opacity duration-300 rounded-2xl"
-        style={{
-          opacity,
-          background: `radial-gradient(350px circle at ${pos.x}px ${pos.y}px, ${gradientColor}, transparent 70%)`,
-        }}
-      />
       {children}
     </div>
   );

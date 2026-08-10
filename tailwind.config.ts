@@ -39,7 +39,18 @@ const config: Config = {
         border: "#E5E2D9",
       },
       fontFamily: {
-        serif: ["var(--font-playfair)", "Playfair Display", "serif"],
+        // Inter sits between Playfair and the generic serif on purpose:
+        // Playfair has no ₦ (U+20A6), and CSS resolves font fallback per
+        // glyph, so a Naira amount inside a serif header renders in Inter
+        // instead of dropping to Times. Keep this in sync with the
+        // `.font-serif` rule in globals.css.
+        serif: [
+          "var(--font-playfair)",
+          "Playfair Display",
+          "var(--font-inter)",
+          "Inter",
+          "serif",
+        ],
         sans: ["var(--font-inter)", "Inter", "system-ui", "sans-serif"],
       },
       borderRadius: {

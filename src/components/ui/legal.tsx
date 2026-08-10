@@ -26,25 +26,41 @@ export function LegalArticle({
 }) {
   return (
     <article className="space-y-6">
-      <Link href="/legal" className="inline-flex items-center gap-2 text-sm text-vodium-cream/45 hover:text-vodium-gold">
+      <Link
+        href="/legal"
+        className="inline-flex items-center gap-2 text-[13px] text-[color:var(--text-tertiary)] transition-colors hover:text-vodium-gold"
+      >
         <ArrowLeft size={15} /> All legal documents
       </Link>
 
-      <div className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs text-amber-200/80">
-        Template document. Review and adapt with a qualified Nigerian lawyer before relying on it for live customers.
+      <div className="rounded-lg border border-[#D2A24C]/25 bg-[#D2A24C]/[0.07] px-4 py-3 text-[12px] leading-relaxed text-[#DFB569]">
+        Template document. Review and adapt with a qualified Nigerian lawyer
+        before relying on it for live customers.
       </div>
 
       <header>
-        <h1 className="font-serif text-3xl text-vodium-cream">{title}</h1>
-        <p className="text-sm text-vodium-cream/40 mt-2">Last updated: {updated} · {COMPANY}</p>
+        <h1 className="font-serif text-[30px] leading-tight tracking-[-0.015em] text-[color:var(--text-primary)]">
+          {title}
+        </h1>
+        <p className="mt-2 text-[13px] text-[color:var(--text-tertiary)]">
+          Last updated {updated} · {COMPANY}
+        </p>
       </header>
 
-      <div className="space-y-6 text-sm leading-relaxed text-vodium-cream/70 [&_h2]:font-serif [&_h2]:text-lg [&_h2]:text-vodium-cream [&_h2]:mt-8 [&_h2]:mb-2 [&_a]:text-vodium-gold [&_a]:underline [&_strong]:text-vodium-cream [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_li]:marker:text-vodium-gold/50">
+      {/* Prose styling is shared with /privacy and /terms via .prose-vodium. */}
+      <div className="prose-vodium border-t border-[color:var(--hairline)] pt-6">
         {children}
       </div>
 
-      <footer className="border-t border-white/[0.06] pt-5 text-xs text-vodium-cream/35">
-        Questions? Contact <a className="text-vodium-gold underline" href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
+      <footer className="border-t border-[color:var(--hairline)] pt-5 text-[12px] text-[color:var(--text-quaternary)]">
+        Questions? Contact{" "}
+        <a
+          className="text-vodium-gold underline underline-offset-2"
+          href={`mailto:${SUPPORT_EMAIL}`}
+        >
+          {SUPPORT_EMAIL}
+        </a>
+        .
       </footer>
     </article>
   );

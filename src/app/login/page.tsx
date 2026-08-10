@@ -3,22 +3,30 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  Eye,
-  EyeOff,
-  Lock,
-  Mail,
-  Shield,
-  Zap,
-  MessageCircle,
-  TrendingUp,
-  ArrowLeft,
-  RefreshCw,
-} from "lucide-react";
-import { Spotlight } from "@/components/ui/spotlight";
+import { ArrowLeft, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
+import { AuthStepPanel } from "@/components/ui/auth-step-panel";
+
+/**
+ * Vendor sign-in — password, then a 6-digit code emailed via Resend.
+ *
+ * Laid out as a single centred column rather than the previous split with a
+ * marketing panel. Someone reaching this screen has already decided; the
+ * "127+ vendors / ₦47M tracked" stats that used to fill 42% of the viewport
+ * were selling to a customer who is trying to log in.
+ *
+ * Dark surface, matching the marketing site and the dashboard — the form used
+ * to sit on cream, so signing in flashed bright and then landed on a dark
+ * dashboard.
+ */
 
 type Screen = "credentials" | "otp";
+
+/** Sign-in is two stages, not a wizard — named here so the rail can list them. */
+const LOGIN_STEPS = [
+  { id: 1, label: "Email and password" },
+  { id: 2, label: "Emailed code" },
+] as const;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,11 +39,14 @@ export default function LoginPage() {
   const [resending, setResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [tenant, setTenant] = useState<{ name: string; logoUrl: string | null; brandColor: string | null } | null>(null);
+  const [tenant, setTenant] = useState<{
+    name: string;
+    logoUrl: string | null;
+    brandColor: string | null;
+  } | null>(null);
   const submitting = useRef(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Countdown for resend button
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const t = setTimeout(() => setResendCooldown((c) => c - 1), 1000);
@@ -52,8 +63,6 @@ export default function LoginPage() {
 
   const brand = tenant?.brandColor || "#C9A961";
 
-  // ── Step 1: verify credentials, request OTP ────────────────────────────
-
   async function handleCredentials(e: React.FormEvent) {
     e.preventDefault();
     if (submitting.current) return;
@@ -68,10 +77,8 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-
       if (!res.ok) throw new Error(data.error ?? "Something went wrong");
 
-      // OTP sent — switch to OTP screen
       setScreen("otp");
       setResendCooldown(30);
       setTimeout(() => otpRefs.current[0]?.focus(), 100);
@@ -82,8 +89,6 @@ export default function LoginPage() {
       submitting.current = false;
     }
   }
-
-  // ── Step 2: verify OTP, set session ───────────────────────────────────
 
   async function handleOtp(e: React.FormEvent) {
     e.preventDefault();
@@ -101,7 +106,6 @@ export default function LoginPage() {
         body: JSON.stringify({ email, otp: code }),
       });
       const data = await res.json();
-
       if (!res.ok) throw new Error(data.error ?? "Invalid code");
       router.push("/dashboard");
     } catch (err) {
@@ -164,279 +168,188 @@ export default function LoginPage() {
     otpRefs.current[Math.min(digits.length, 5)]?.focus();
   }
 
-  // ── Shared left panel ──────────────────────────────────────────────────
-
-  const LeftPanel = (
-    <div className="hidden md:flex flex-col w-[42%] min-h-screen bg-vodium-black relative overflow-hidden px-12 py-10 border-r border-white/[0.05]">
-      <div className="absolute inset-0 bg-dots opacity-30 pointer-events-none" />
-      <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-vodium-gold/[0.04] rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-vodium-gold/[0.03] rounded-full blur-[80px] pointer-events-none" />
-      <div className="absolute inset-0 bg-grid opacity-40 pointer-events-none" />
-      <Spotlight className="-top-60 left-0 opacity-20" />
-
-      <Link href="/" className="relative z-10 flex items-center gap-3 group">
-        {tenant?.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={tenant.logoUrl} alt={tenant.name} className="w-10 h-10 rounded-full object-cover border" style={{ borderColor: `${brand}66` }} />
-        ) : (
-          <div className="w-10 h-10 rounded-full bg-vodium-charcoal border flex items-center justify-center transition-colors" style={{ borderColor: `${brand}66` }}>
-            <span className="font-serif text-xl leading-none" style={{ color: brand }}>
-              {tenant ? tenant.name.trim().charAt(0).toUpperCase() : "V"}
-            </span>
-          </div>
-        )}
-        <span className="font-serif tracking-[0.18em] text-sm" style={{ color: brand }}>
-          {tenant ? tenant.name.toUpperCase() : "VODIUM LEDGER"}
+  const Brandmark = (
+    <Link href="/" className="inline-flex items-center gap-2.5">
+      {tenant?.logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={tenant.logoUrl}
+          alt={tenant.name}
+          className="h-8 w-8 rounded-lg border object-cover"
+          style={{ borderColor: `${brand}59` }}
+        />
+      ) : (
+        <span
+          className="flex h-8 w-8 items-center justify-center rounded-lg border bg-[color:var(--surface-2)]"
+          style={{ borderColor: `${brand}59` }}
+        >
+          <span className="font-serif text-[15px] leading-none" style={{ color: brand }}>
+            {tenant ? tenant.name.trim().charAt(0).toUpperCase() : "V"}
+          </span>
         </span>
-      </Link>
-
-      <div className="flex-1 flex flex-col justify-center relative z-10">
-        <p className="text-vodium-gold text-xs tracking-[0.35em] uppercase mb-6">
-          Welcome back
-        </p>
-        <h2 className="font-serif text-4xl text-vodium-cream leading-tight mb-6">
-          Your credit
-          <br />
-          ledger
-          <br />
-          <em className="text-gradient-gold not-italic">awaits.</em>
-        </h2>
-        <p className="text-vodium-cream/45 leading-relaxed max-w-sm text-sm mb-12">
-          Sign in to track credits, send reminders, and view your repayment
-          dashboard.
-        </p>
-        <div className="space-y-4">
-          {[
-            {
-              icon: <Zap size={15} />,
-              label: "Instant access",
-              sub: "Your full dashboard in seconds",
-            },
-            {
-              icon: <MessageCircle size={15} />,
-              label: "WhatsApp-first",
-              sub: "Record credits right from WhatsApp",
-            },
-            {
-              icon: <Shield size={15} />,
-              label: "Secure by default",
-              sub: "Password + email code, every login",
-            },
-            {
-              icon: <TrendingUp size={15} />,
-              label: "Recovery insights",
-              sub: "See which students owe and how much",
-            },
-          ].map((b) => (
-            <div key={b.label} className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-lg bg-vodium-gold/10 border border-vodium-gold/20 flex items-center justify-center text-vodium-gold flex-shrink-0 mt-0.5">
-                {b.icon}
-              </div>
-              <div>
-                <p className="text-vodium-cream text-sm font-medium">
-                  {b.label}
-                </p>
-                <p className="text-vodium-cream/35 text-xs mt-0.5">{b.sub}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="relative z-10 border-t border-white/[0.07] pt-8">
-        <div className="grid grid-cols-3 gap-6">
-          {[
-            { value: "127+", label: "Active vendors" },
-            { value: "₦47M+", label: "Credit tracked" },
-            { value: "73%", label: "Repayment rate" },
-          ].map((s) => (
-            <div key={s.label}>
-              <p className="font-serif text-2xl text-vodium-gold">{s.value}</p>
-              <p className="text-vodium-cream/35 text-xs mt-0.5">{s.label}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+      )}
+      <span
+        className="font-serif text-[13px] tracking-[0.16em]"
+        style={{ color: tenant ? brand : undefined }}
+      >
+        {tenant ? tenant.name.toUpperCase() : "VODIUM LEDGER"}
+      </span>
+    </Link>
   );
 
-  // ── Screen: credentials ────────────────────────────────────────────────
+  return (
+    <div className="marketing-page flex min-h-screen justify-center gap-16 px-6 py-8 pb-safe pt-safe xl:gap-24">
+      {/* Progress rail — wide screens only, mirroring /register so the two
+          screens feel like one flow. */}
+      <aside
+        aria-label="Sign-in progress"
+        className="hidden w-64 shrink-0 py-2 xl:block"
+      >
+        <div className="sticky top-8">
+          <AuthStepPanel
+            steps={LOGIN_STEPS}
+            currentStep={screen === "credentials" ? 1 : 2}
+            heading="Welcome back."
+            caption="Two steps: your password, then a code we email you."
+            brandmark={Brandmark}
+          />
+        </div>
+      </aside>
 
-  if (screen === "credentials") {
-    return (
-      <div className="min-h-screen flex flex-col md:flex-row">
-        {LeftPanel}
-        <div className="flex-1 flex flex-col bg-vodium-cream min-h-screen px-8 py-10 md:px-14">
-          <Link href="/" className="flex items-center gap-3 md:hidden mb-10">
-            <div className="w-9 h-9 rounded-full bg-vodium-black border border-vodium-gold/40 flex items-center justify-center">
-              <span className="font-serif text-vodium-gold text-lg">V</span>
-            </div>
-            <span className="font-serif tracking-[0.18em] text-vodium-black text-sm">
-              VODIUM LEDGER
-            </span>
-          </Link>
+      <div className="flex w-full max-w-md flex-col">
+      <header className="mx-auto flex w-full max-w-md items-center justify-between xl:hidden">
+        <span className="text-[color:var(--text-primary)]">{Brandmark}</span>
+      </header>
 
-          <div className="hidden md:flex justify-end mb-6">
-            <Link
-              href="/register"
-              className="text-sm text-vodium-black/50 hover:text-vodium-black transition-colors"
-            >
-              No account?{" "}
-              <span className="text-vodium-black font-semibold hover:text-vodium-gold transition-colors">
-                Sign up free
-              </span>
-            </Link>
-          </div>
+      <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-12">
+        {screen === "credentials" ? (
+          <>
+            <h1 className="font-serif text-[28px] leading-tight text-[color:var(--text-primary)]">
+              Sign in
+            </h1>
+            <p className="mt-2 text-[14px] leading-relaxed text-[color:var(--text-tertiary)]">
+              Enter your password and we&rsquo;ll email you a verification code.
+            </p>
 
-          <div className="flex-1 flex flex-col justify-center">
-            <div className="max-w-sm mx-auto w-full">
-              <div className="mb-8">
-                <div className="w-11 h-11 rounded-2xl bg-vodium-gold/10 border border-vodium-gold/25 flex items-center justify-center mb-5">
-                  <Lock size={20} className="text-vodium-gold" />
-                </div>
-                <h1 className="font-serif text-3xl text-vodium-black mb-2">
-                  Sign in
-                </h1>
-                <p className="text-muted-foreground text-sm">
-                  Enter your credentials we&apos;ll send a verification code to
-                  your email.
-                </p>
+            <form onSubmit={handleCredentials} className="mt-8 space-y-4">
+              <div>
+                <label
+                  htmlFor="email"
+                  className="mb-1.5 block text-[13px] font-medium text-[color:var(--text-secondary)]"
+                >
+                  Email address
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setError(null);
+                  }}
+                  required
+                  autoFocus
+                  className="input-dark"
+                />
               </div>
 
-              <form onSubmit={handleCredentials} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-vodium-black mb-1.5">
-                    Email address
+              <div>
+                <div className="mb-1.5 flex items-baseline justify-between">
+                  <label
+                    htmlFor="password"
+                    className="block text-[13px] font-medium text-[color:var(--text-secondary)]"
+                  >
+                    Password
                   </label>
-                  <div className="relative">
-                    <Mail
-                      size={15}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-                    />
-                    <input
-                      type="email"
-                      autoComplete="email"
-                      placeholder="jeff@vodiumledger.com"
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        setError(null);
-                      }}
-                      required
-                      className="input-premium pr-9 w-full"
-                      autoFocus
-                    />
-                  </div>
+                  <Link
+                    href="/forgot-password"
+                    className="text-[12px] text-[color:var(--text-quaternary)] transition-colors hover:text-vodium-gold"
+                  >
+                    Forgot password?
+                  </Link>
                 </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-sm font-medium text-vodium-black">
-                      Password
-                    </label>
-                    <Link href="/forgot-password" className="text-xs text-vodium-black/50 hover:text-vodium-black underline underline-offset-2">
-                      Forgot password?
-                    </Link>
-                  </div>
-                  <div className="relative">
-                    <Lock
-                      size={15}
-                      className="absolute right-10 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-                    />
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      autoComplete="current-password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        setError(null);
-                      }}
-                      required
-                      className="input-premium pr-10 w-full"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((v) => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-vodium-black transition-colors"
-                    >
-                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError(null);
+                    }}
+                    required
+                    className="input-dark pr-11"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[color:var(--text-quaternary)] transition-colors hover:text-[color:var(--text-primary)]"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
                 </div>
+              </div>
 
-                {error && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-danger flex items-start gap-2">
-                    <span className="flex-shrink-0 mt-0.5">⚠</span>
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                <ShimmerButton
-                  type="submit"
-                  className={`w-full h-11 text-sm mt-2 ${loading ? "opacity-50 pointer-events-none" : ""}`}
+              {/* role="alert" so a screen reader announces the failure rather
+                  than leaving the user waiting on a form that silently stopped. */}
+              {error && (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-[#E5534B]/25 bg-[#E5534B]/10 px-3.5 py-2.5 text-[13px] text-[#F0736B]"
                 >
-                  {loading ? "Sending code…" : "Continue"}
-                </ShimmerButton>
-              </form>
+                  {error}
+                </p>
+              )}
 
-              <p className="mt-8 text-center text-sm text-muted-foreground md:hidden">
-                No account?{" "}
-                <Link
-                  href="/register"
-                  className="text-vodium-black font-semibold hover:text-vodium-gold transition-colors"
-                >
-                  Sign up free
-                </Link>
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+              <ShimmerButton type="submit" disabled={loading} className="mt-2 w-full">
+                {loading ? "Sending code…" : "Continue"}
+              </ShimmerButton>
+            </form>
 
-  // ── Screen: OTP ────────────────────────────────────────────────────────
-
-  return (
-    <div className="min-h-screen flex flex-col md:flex-row">
-      {LeftPanel}
-      <div className="flex-1 flex flex-col bg-vodium-cream min-h-screen px-8 py-10 md:px-14">
-        <div className="flex-1 flex flex-col justify-center">
-          <div className="max-w-sm mx-auto w-full">
+            <p className="mt-8 text-center text-[13px] text-[color:var(--text-tertiary)]">
+              No account?{" "}
+              <Link
+                href="/register"
+                className="font-medium text-[color:var(--text-primary)] transition-colors hover:text-vodium-gold"
+              >
+                Sign up free
+              </Link>
+            </p>
+          </>
+        ) : (
+          <>
             <button
               onClick={() => {
                 setScreen("credentials");
                 setOtp(["", "", "", "", "", ""]);
                 setError(null);
               }}
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-vodium-black transition-colors mb-8"
+              className="mb-8 inline-flex items-center gap-2 self-start text-[13px] text-[color:var(--text-tertiary)] transition-colors hover:text-[color:var(--text-primary)]"
             >
-              <ArrowLeft size={16} /> Back
+              <ArrowLeft size={15} /> Back
             </button>
 
-            <div className="mb-8">
-              <div className="w-11 h-11 rounded-2xl bg-vodium-gold/10 border border-vodium-gold/25 flex items-center justify-center mb-5">
-                <Shield size={20} className="text-vodium-gold" />
-              </div>
-              <h1 className="font-serif text-3xl text-vodium-black mb-2">
-                Check your email
-              </h1>
-              <p className="text-muted-foreground text-sm">
-                We sent a 6-digit code to{" "}
-                <span className="text-vodium-black font-semibold">{email}</span>
-                .
-                <br />
-                It expires in 10 minutes.
-              </p>
-            </div>
+            <h1 className="font-serif text-[28px] leading-tight text-[color:var(--text-primary)]">
+              Check your email
+            </h1>
+            <p className="mt-2 text-[14px] leading-relaxed text-[color:var(--text-tertiary)]">
+              We sent a 6-digit code to{" "}
+              <span className="text-[color:var(--text-primary)]">{email}</span>. It
+              expires in 10 minutes.
+            </p>
 
-            <form onSubmit={handleOtp} className="space-y-6">
-              {/* 6-box OTP input */}
-              <div>
-                <label className="block text-sm font-medium text-vodium-black mb-3">
+            <form onSubmit={handleOtp} className="mt-8 space-y-5">
+              {/* Grouped as a fieldset so the six boxes read as one labelled
+                  control instead of six anonymous text inputs. */}
+              <fieldset>
+                <legend className="mb-3 text-[13px] font-medium text-[color:var(--text-secondary)]">
                   Verification code
-                </label>
+                </legend>
                 <div className="flex gap-2">
                   {otp.map((digit, i) => (
                     <input
@@ -446,31 +359,39 @@ export default function LoginPage() {
                       }}
                       type="text"
                       inputMode="numeric"
+                      // Lets iOS and Android offer the emailed code as autofill.
+                      autoComplete={i === 0 ? "one-time-code" : "off"}
+                      aria-label={`Digit ${i + 1} of 6`}
                       maxLength={1}
                       value={digit}
                       onChange={(e) => handleOtpInput(i, e.target.value)}
                       onKeyDown={(e) => handleOtpKeyDown(i, e)}
                       onPaste={handleOtpPaste}
-                      className={`w-full aspect-square text-center text-xl font-bold border rounded-xl transition-all outline-none
-                        ${digit ? "border-vodium-gold bg-vodium-gold/5 text-vodium-black" : "border-border bg-white text-vodium-black"}
-                        focus:border-vodium-gold focus:ring-2 focus:ring-vodium-gold/20`}
+                      className={`tnum aspect-square w-full rounded-lg border bg-[color:var(--surface-1)] text-center text-[18px] outline-none transition-colors ${
+                        digit
+                          ? "border-vodium-gold/50 text-[color:var(--text-primary)]"
+                          : "border-[color:var(--hairline-strong)] text-[color:var(--text-primary)]"
+                      } focus:border-vodium-gold`}
                     />
                   ))}
                 </div>
-              </div>
+              </fieldset>
 
               {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-danger flex items-start gap-2">
-                  <span className="flex-shrink-0 mt-0.5">⚠</span>
-                  <span>{error}</span>
-                </div>
+                <p
+                  role="alert"
+                  className="rounded-lg border border-[#E5534B]/25 bg-[#E5534B]/10 px-3.5 py-2.5 text-[13px] text-[#F0736B]"
+                >
+                  {error}
+                </p>
               )}
 
               <ShimmerButton
                 type="submit"
-                className={`w-full h-11 text-sm ${otp.join("").length < 6 || loading ? "opacity-40 pointer-events-none" : ""}`}
+                disabled={otp.join("").length < 6 || loading}
+                className="w-full"
               >
-                {loading ? "Verifying…" : "Verify & Sign in"}
+                {loading ? "Verifying…" : "Verify and sign in"}
               </ShimmerButton>
             </form>
 
@@ -478,19 +399,25 @@ export default function LoginPage() {
               <button
                 onClick={handleResend}
                 disabled={resendCooldown > 0 || resending}
-                className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-vodium-black transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                className="inline-flex items-center gap-2 text-[13px] text-[color:var(--text-tertiary)] transition-colors hover:text-[color:var(--text-primary)] disabled:pointer-events-none disabled:opacity-40"
               >
-                <RefreshCw
-                  size={14}
-                  className={resending ? "animate-spin" : ""}
-                />
-                {resendCooldown > 0
-                  ? `Resend in ${resendCooldown}s`
-                  : "Resend code"}
+                <RefreshCw size={14} className={resending ? "animate-spin" : ""} />
+                {resendCooldown > 0 ? (
+                  <span className="tnum">Resend in {resendCooldown}s</span>
+                ) : (
+                  "Resend code"
+                )}
               </button>
             </div>
-          </div>
-        </div>
+          </>
+        )}
+      </main>
+
+      <footer className="mx-auto w-full max-w-md text-center">
+        <p className="text-[12px] text-[color:var(--text-quaternary)]">
+          Protected by password and a one-time email code.
+        </p>
+      </footer>
       </div>
     </div>
   );

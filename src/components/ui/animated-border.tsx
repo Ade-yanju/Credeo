@@ -1,11 +1,32 @@
-"use client";
 import { cn } from "@/lib/utils";
 
-export function AnimatedBorder({ children, className, containerClassName }: { children: React.ReactNode; className?: string; containerClassName?: string }) {
+/**
+ * Emphasised card — used for the pricing tier a vendor should pick and for the
+ * highlighted panel in dashboard settings.
+ *
+ * The gold gradient that bloomed around the edge on hover has been replaced by
+ * a persistent gold-tinted hairline. Emphasis that only appears on hover is
+ * invisible on touch, where most vendors are, so the card that matters now
+ * looks different at rest instead of rewarding a mouse.
+ */
+export function AnimatedBorder({
+  children,
+  className,
+  containerClassName,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  containerClassName?: string;
+}) {
   return (
-    <div className={cn("relative group/border", containerClassName)}>
-      <div className="absolute -inset-[1px] rounded-2xl bg-gradient-to-r from-vodium-gold/0 via-vodium-gold/60 to-vodium-gold/0 opacity-0 group-hover/border:opacity-100 transition-opacity duration-500 blur-[0.5px]" />
-      <div className={cn("relative rounded-2xl bg-vodium-charcoal border border-white/[0.06]", className)}>
+    <div className={cn("relative", containerClassName)}>
+      <div
+        className={cn(
+          "relative rounded-xl border border-vodium-gold/25 bg-[color:var(--surface-1)]",
+          "transition-colors duration-150 hover:border-vodium-gold/40",
+          className,
+        )}
+      >
         {children}
       </div>
     </div>

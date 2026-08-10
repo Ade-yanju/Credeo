@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Clock, User } from "lucide-react";
+import { SiteNav } from "@/components/marketing/site-nav";
+import { SiteFooter } from "@/components/marketing/site-footer";
+import { ArrowRight, Clock, User } from "lucide-react";
 import { MagicCard } from "@/components/ui/magic-card";
 import { AnimatedBorder } from "@/components/ui/animated-border";
 import { NewsletterForm } from "@/components/ui/newsletter-form";
@@ -87,16 +89,16 @@ function FeaturedCard({ post }: { post: BlogPost }) {
             FEATURED
           </span>
           <TagBadge tag={post.tag} color={post.tagColor} />
-          <span className="text-vodium-cream/30 text-xs">{post.date}</span>
+          <span className="text-[color:var(--text-quaternary)] text-xs">{post.date}</span>
         </div>
-        <h2 className="font-serif text-2xl md:text-3xl lg:text-4xl text-vodium-cream leading-snug mb-4 group-hover:text-vodium-gold transition-colors duration-200 max-w-3xl">
+        <h2 className="font-serif text-2xl md:text-3xl lg:text-4xl text-[color:var(--text-primary)] leading-snug mb-4 group-hover:text-vodium-gold transition-colors duration-200 max-w-3xl">
           {post.title}
         </h2>
-        <p className="text-vodium-cream/55 text-base leading-relaxed max-w-2xl mb-6">
+        <p className="text-[color:var(--text-tertiary)] text-base leading-relaxed max-w-2xl mb-6">
           {post.excerpt}
         </p>
         <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4 text-xs text-vodium-cream/40">
+          <div className="flex items-center gap-4 text-xs text-[color:var(--text-tertiary)]">
             <span className="flex items-center gap-1.5">
               <User size={12} />
               {post.author}
@@ -106,7 +108,7 @@ function FeaturedCard({ post }: { post: BlogPost }) {
               {post.readTime}
             </span>
           </div>
-          <span className="flex items-center gap-1.5 text-vodium-gold text-sm font-semibold group-hover:gap-3 transition-all duration-200">
+          <span className="flex items-center gap-1.5 text-vodium-gold text-sm font-semibold group- transition-all duration-200">
             Read article <ArrowRight size={14} />
           </span>
         </div>
@@ -121,16 +123,16 @@ function PostCard({ post }: { post: BlogPost }) {
       <Link href={post.href} className="group block p-6 h-full flex flex-col">
         <div className="flex items-center gap-2.5 mb-4">
           <TagBadge tag={post.tag} color={post.tagColor} />
-          <span className="text-vodium-cream/30 text-xs">{post.date}</span>
+          <span className="text-[color:var(--text-quaternary)] text-xs">{post.date}</span>
         </div>
-        <h3 className="font-serif text-xl md:text-2xl text-vodium-cream leading-snug mb-3 group-hover:text-vodium-gold transition-colors duration-200 flex-1">
+        <h3 className="font-serif text-xl md:text-2xl text-[color:var(--text-primary)] leading-snug mb-3 group-hover:text-vodium-gold transition-colors duration-200 flex-1">
           {post.title}
         </h3>
-        <p className="text-vodium-cream/50 text-sm leading-relaxed mb-5">
+        <p className="text-[color:var(--text-tertiary)] text-sm leading-relaxed mb-5">
           {post.excerpt}
         </p>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4 text-xs text-vodium-cream/35">
+          <div className="flex items-center gap-4 text-xs text-[color:var(--text-quaternary)]">
             <span className="flex items-center gap-1.5">
               <User size={11} />
               {post.author}
@@ -142,7 +144,7 @@ function PostCard({ post }: { post: BlogPost }) {
           </div>
           <ArrowRight
             size={13}
-            className="text-vodium-cream/20 group-hover:text-vodium-gold transition-colors"
+            className="text-[color:var(--text-quaternary)] group-hover:text-vodium-gold transition-colors"
           />
         </div>
       </Link>
@@ -154,51 +156,23 @@ export default function BlogPage() {
   const [featured, ...rest] = posts;
 
   return (
-    <div className="min-h-screen bg-vodium-black text-vodium-cream">
-      {/* Nav */}
-      <nav className="fixed top-0 inset-x-0 z-50 bg-[#0A0A0A]/90 backdrop-blur-md border-b border-white/[0.06] pt-safe px-safe">
-        <div className="max-w-6xl mx-auto px-6 md:px-12 flex items-center justify-between h-16">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-vodium-charcoal border border-vodium-gold/40 flex items-center justify-center">
-              <span className="font-serif text-vodium-gold text-lg leading-none">
-                V
-              </span>
-            </div>
-            <span className="font-serif tracking-[0.18em] text-vodium-gold text-sm">
-              VODIUM LEDGER
-            </span>
-          </Link>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/"
-              className="text-sm text-vodium-cream/50 hover:text-vodium-gold transition-colors flex items-center gap-1.5"
-            >
-              <ArrowLeft size={14} /> Home
-            </Link>
-            <Link
-              href="/register"
-              className="inline-flex items-center gap-1.5 btn-gold px-5 py-2.5 rounded-xl text-sm font-semibold hover:shadow-[0_0_20px_rgba(201,169,97,0.3)] transition-all"
-            >
-              Get started <ArrowRight size={13} />
-            </Link>
-          </div>
-        </div>
-      </nav>
+    <div className="marketing-page min-h-screen">
+      <SiteNav />
 
       <main className="pt-16">
         {/* Hero */}
-        <section className="mesh-bg relative overflow-hidden">
+        <section className="relative overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_0%,rgba(201,169,97,0.05),transparent)] pointer-events-none" />
           <div className="max-w-6xl mx-auto px-6 md:px-12 pt-24 pb-20 relative z-10">
-            <span className="inline-block text-vodium-gold text-xs tracking-[0.3em] uppercase font-semibold mb-5">
+            <span className="inline-block eyebrow mb-5">
               Blog
             </span>
-            <h1 className="font-serif text-5xl md:text-6xl text-vodium-cream mb-4 leading-tight max-w-xl">
+            <h1 className="font-serif text-[38px] leading-[1.08] tracking-[-0.02em] text-[color:var(--text-primary)] md:text-[52px] mb-4 leading-tight max-w-xl">
               From the
               <br />
               Vodium team.
             </h1>
-            <p className="text-vodium-cream/50 text-lg max-w-xl leading-relaxed">
+            <p className="text-[color:var(--text-tertiary)] text-lg max-w-xl leading-relaxed">
               Insights on campus credit, Nigerian fintech, and the data
               we&apos;re seeing.
             </p>
@@ -217,24 +191,24 @@ export default function BlogPage() {
         </section>
 
         {/* Newsletter */}
-        <section className="border-t border-white/[0.06]">
+        <section className="border-t border-[color:var(--hairline)]">
           <div className="max-w-6xl mx-auto px-6 md:px-12 py-20">
             <div className="max-w-lg mx-auto">
               <AnimatedBorder className="p-8 md:p-10">
                 <div className="text-center mb-8">
-                  <span className="inline-block text-vodium-gold text-xs tracking-[0.3em] uppercase font-semibold mb-4">
+                  <span className="inline-block eyebrow mb-4">
                     Newsletter
                   </span>
-                  <h2 className="font-serif text-2xl md:text-3xl text-vodium-cream mb-3">
+                  <h2 className="font-serif text-2xl md:text-3xl text-[color:var(--text-primary)] mb-3">
                     Get insights delivered.
                   </h2>
-                  <p className="text-vodium-cream/50 text-sm leading-relaxed">
+                  <p className="text-[color:var(--text-tertiary)] text-sm leading-relaxed">
                     Articles on campus finance, product updates, and fintech
                     data straight to your inbox.
                   </p>
                 </div>
                 <NewsletterForm />
-                <p className="text-vodium-cream/25 text-xs mt-4 text-center">
+                <p className="text-[color:var(--text-quaternary)] text-xs mt-4 text-center">
                   No spam. Unsubscribe any time.
                 </p>
               </AnimatedBorder>
@@ -244,37 +218,7 @@ export default function BlogPage() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-white/[0.06] py-10 px-6 md:px-12">
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-vodium-cream/30">
-          <span className="text-center md:text-left">© 2026 Vodium. Lagos, Nigeria.<br />Vodium Ledger is operated by VODIUMX TECHNOLOGIES LTD (RC: 8976921).</span>
-          <div className="flex gap-6">
-            <Link
-              href="/privacy"
-              className="hover:text-vodium-gold transition-colors"
-            >
-              Privacy
-            </Link>
-            <Link
-              href="/terms"
-              className="hover:text-vodium-gold transition-colors"
-            >
-              Terms
-            </Link>
-            <Link
-              href="/about"
-              className="hover:text-vodium-gold transition-colors"
-            >
-              About
-            </Link>
-            <Link
-              href="/careers"
-              className="hover:text-vodium-gold transition-colors"
-            >
-              Careers
-            </Link>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

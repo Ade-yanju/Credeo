@@ -1,15 +1,38 @@
 import { cn } from "@/lib/utils";
 
-export function GlowBadge({ children, color = "gold", className }: { children: React.ReactNode; color?: "gold" | "green" | "red" | "amber" | "blue"; className?: string }) {
+/**
+ * Status pill.
+ *
+ * Named GlowBadge for continuity with its call sites (8 files), but the glow is
+ * gone: a coloured box-shadow on every status made routine information read as
+ * an alert. Flat tint plus a hairline is enough to separate states, and it
+ * keeps overdue — where we *do* want the eye to land — actually distinct.
+ */
+export function GlowBadge({
+  children,
+  color = "gold",
+  className,
+}: {
+  children: React.ReactNode;
+  color?: "gold" | "green" | "red" | "amber" | "blue" | "neutral";
+  className?: string;
+}) {
   const colors = {
-    gold:  "bg-vodium-gold/10 text-vodium-gold border-vodium-gold/25 shadow-[0_0_12px_rgba(201,169,97,0.15)]",
-    green: "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.15)]",
-    red:   "bg-rose-500/10 text-rose-400 border-rose-500/25 shadow-[0_0_12px_rgba(244,63,94,0.15)]",
-    amber: "bg-amber-500/10 text-amber-400 border-amber-500/25 shadow-[0_0_12px_rgba(245,158,11,0.15)]",
-    blue:  "bg-blue-500/10 text-blue-400 border-blue-500/25 shadow-[0_0_12px_rgba(59,130,246,0.15)]",
+    gold: "bg-vodium-gold/10 text-vodium-gold border-vodium-gold/25",
+    green: "bg-[#3FB950]/10 text-[#56C963] border-[#3FB950]/25",
+    red: "bg-[#E5534B]/10 text-[#F0736B] border-[#E5534B]/25",
+    amber: "bg-[#D2A24C]/10 text-[#DFB569] border-[#D2A24C]/25",
+    blue: "bg-[#4C8EDA]/10 text-[#79B0EC] border-[#4C8EDA]/25",
+    neutral: "bg-[#6E7681]/12 text-[#9BA3AE] border-[#6E7681]/25",
   };
   return (
-    <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border", colors[color], className)}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+        colors[color],
+        className,
+      )}
+    >
       {children}
     </span>
   );

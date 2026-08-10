@@ -12,6 +12,33 @@
   --vodium-slate: #2A2A2A;
   --vodium-border-dark: rgba(201, 169, 97, 0.12);
   --vodium-border-light: #E5E2D9;
+
+  /* ── Dashboard surface ramp ──────────────────────
+     Four steps of near-black. Depth comes from surface
+     lightness and a hairline, not from drop shadows. */
+  --surface-0: #0B0B0C;   /* app canvas   */
+  --surface-1: #121213;   /* card         */
+  --surface-2: #171719;   /* raised / row */
+  --surface-3: #1D1D20;   /* hover        */
+
+  --hairline: rgba(255, 255, 255, 0.07);
+  --hairline-strong: rgba(255, 255, 255, 0.11);
+
+  /* Text ramp — four deliberate steps, not ad-hoc opacities. */
+  --text-primary: #F2F2EF;
+  --text-secondary: rgba(242, 242, 239, 0.62);
+  --text-tertiary: rgba(242, 242, 239, 0.40);
+  --text-quaternary: rgba(242, 242, 239, 0.26);
+
+  /* Semantic status. One hue each, used consistently. */
+  --status-positive: #3FB950;
+  --status-caution: #D2A24C;
+  --status-negative: #E5534B;
+  --status-neutral: #6E7681;
+
+  /* Elevation — restrained. Ambient occlusion, not a glow. */
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --elev-2: 0 4px 16px -4px rgba(0, 0, 0, 0.45);
 }
 
 /* ── Mobile safe areas (PWA / notches / home indicator) ── */
@@ -28,9 +55,14 @@
 /* ── Base ───────────────────────────────────────── */
 html { scroll-behavior: smooth; }
 
+/* The canvas is dark everywhere — marketing, auth, dashboard and admin all
+   paint over it. Setting it on html as well as body matters on iOS: rubber-band
+   overscroll past the end of a page exposes the html background, and a cream
+   flash there reads as a rendering bug. Also keeps the first paint matching the
+   #0A0A0A themeColor instead of flashing light. */
 html, body {
-  background: var(--vodium-cream);
-  color: var(--vodium-black);
+  background: var(--surface-0);
+  color: var(--text-primary);
   font-family: var(--font-inter), Inter, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -48,9 +80,22 @@ html, body {
 ::-webkit-scrollbar-thumb:hover { background: var(--vodium-gold); }
 
 /* ── Typography ────────────────────────────────── */
+/* Playfair has no ₦ (U+20A6). CSS font fallback resolves per-glyph, so listing
+   Inter before the generic serif means a Naira sign inside a serif header
+   renders in Inter instead of dropping to Times or a tofu box. */
 h1, h2, h3, h4, .font-serif {
-  font-family: var(--font-playfair), "Playfair Display", serif;
-  letter-spacing: -0.01em;
+  font-family: var(--font-playfair), "Playfair Display",
+               var(--font-inter), Inter, serif;
+  letter-spacing: -0.011em;
+}
+
+/* Financial figures: lining tabular numerals so columns of Naira line up and
+   digits don't reflow as values change. Apply to any money or metric. */
+.tnum {
+  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  letter-spacing: -0.014em;
 }
 
 /* ── Brand ─────────────────────────────────────── */
@@ -134,25 +179,7 @@ h1, h2, h3, h4, .font-serif {
 }
 .input-premium::placeholder { color: #9CA3AF; }
 
-.input-dark {
-  background: var(--vodium-slate);
-  border: 1.5px solid rgba(201, 169, 97, 0.14);
-  color: var(--vodium-cream);
-  border-radius: 10px;
-  padding-top: 13px;
-  padding-bottom: 13px;
-  padding-left: 16px;
-  padding-right: 16px;
-  font-size: 15px;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-  outline: none;
-  width: 100%;
-}
-.input-dark:focus {
-  border-color: var(--vodium-gold);
-  box-shadow: 0 0 0 3px rgba(201, 169, 97, 0.08);
-}
-.input-dark::placeholder { color: rgba(250, 250, 247, 0.35); }
+/* .input-dark is defined once, below, under "Input fintech style". */
 
 /* ── Cards ──────────────────────────────────────── */
 .card-dark {
@@ -188,10 +215,10 @@ h1, h2, h3, h4, .font-serif {
   font-weight: 600;
   letter-spacing: 0.01em;
 }
-.badge-paid    { background: rgba(22, 163, 74, 0.1);  color: #16A34A; border: 1px solid rgba(22, 163, 74, 0.2); }
-.badge-outstanding { background: rgba(201, 169, 97, 0.12); color: #B8943D; border: 1px solid rgba(201, 169, 97, 0.25); }
-.badge-overdue { background: rgba(220, 38, 38, 0.1);  color: #DC2626; border: 1px solid rgba(220, 38, 38, 0.2); }
-.badge-due-soon { background: rgba(217, 119, 6, 0.1);  color: #D97706; border: 1px solid rgba(217, 119, 6, 0.2); }
+/* Credit-status badges are defined once, below, under "Credit status badges".
+   They previously appeared twice in this file with different hues; the later
+   block silently won, so the same status rendered in two colours depending on
+   which stylesheet order a page happened to get. */
 .badge-trial    { background: rgba(99, 102, 241, 0.1); color: #6366F1; border: 1px solid rgba(99, 102, 241, 0.2); }
 .badge-active   { background: rgba(22, 163, 74, 0.1);  color: #16A34A; border: 1px solid rgba(22, 163, 74, 0.2); }
 .badge-inactive { background: rgba(100, 116, 139, 0.1); color: #64748B; border: 1px solid rgba(100, 116, 139, 0.2); }
@@ -242,12 +269,7 @@ h1, h2, h3, h4, .font-serif {
 .table-row-dark:last-child { border-bottom: none; }
 .table-row-dark:hover { background: rgba(201, 169, 97, 0.04); }
 
-/* ── Glass effect ───────────────────────────────── */
-.glass-dark {
-  background: rgba(10, 10, 10, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
+/* .glass-dark is defined once, below, under "Fintech glass". */
 
 /* ── Animations ─────────────────────────────────── */
 @keyframes fade-up {
@@ -329,18 +351,57 @@ h1, h2, h3, h4, .font-serif {
   background-clip: text;
 }
 
-/* ── Stat glow ─────────────────────────────────── */
+/* ── Stat surface ──────────────────────────────── */
+/* Was a 40px gold bloom. A metric tile earns attention through type and
+   alignment; a glow just makes the number harder to read. */
 .stat-glow {
-  box-shadow: 0 0 40px rgba(201, 169, 97, 0.08), inset 0 1px 0 rgba(201, 169, 97, 0.1);
+  box-shadow: var(--elev-1);
 }
 
 /* ── Credit status badges ──────────────────────── */
-.badge-paid     { background: rgba(16,185,129,0.12); color: #10B981; border: 1px solid rgba(16,185,129,0.25); }
-.badge-overdue  { background: rgba(244,63,94,0.12);  color: #F43F5E; border: 1px solid rgba(244,63,94,0.25); }
-.badge-due-soon { background: rgba(245,158,11,0.12); color: #F59E0B; border: 1px solid rgba(245,158,11,0.25); }
-.badge-outstanding { background: rgba(99,102,241,0.12); color: #818CF8; border: 1px solid rgba(99,102,241,0.25); }
-.badge-partial  { background: rgba(201,169,97,0.12); color: #C9A961; border: 1px solid rgba(201,169,97,0.25); }
-.badge-written  { background: rgba(100,116,139,0.12); color: #94A3B8; border: 1px solid rgba(100,116,139,0.25); }
+/* Single source of truth. Flat tint + hairline, no glow — a status is
+   information, not an alert light. */
+.badge-paid     { background: rgba(63,185,80,0.10);  color: #56C963; border: 1px solid rgba(63,185,80,0.22); }
+.badge-overdue  { background: rgba(229,83,75,0.10);  color: #F0736B; border: 1px solid rgba(229,83,75,0.22); }
+.badge-due-soon { background: rgba(210,162,76,0.10); color: #DFB569; border: 1px solid rgba(210,162,76,0.22); }
+.badge-outstanding { background: rgba(110,118,129,0.12); color: #9BA3AE; border: 1px solid rgba(110,118,129,0.24); }
+.badge-partial  { background: rgba(201,169,97,0.10); color: #C9A961; border: 1px solid rgba(201,169,97,0.24); }
+.badge-written  { background: rgba(110,118,129,0.10); color: #7D8590; border: 1px solid rgba(110,118,129,0.20); }
+
+/* ── Dashboard surfaces ────────────────────────── */
+.surface-card {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+}
+/* Rows that respond to pointer. Background only — no lift, no scale. */
+.row-interactive {
+  transition: background-color 120ms ease;
+}
+.row-interactive:hover { background: var(--surface-2); }
+
+/* ── Focus ─────────────────────────────────────── */
+/* Keyboard-only ring. Never remove focus without a replacement. */
+:focus-visible {
+  outline: 2px solid var(--vodium-gold);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Reduced motion ────────────────────────────── */
+/* Someone managing debt on a mid-range Android should not be made to wait on
+   choreography. This covers CSS animation and transitions; Framer Motion is
+   handled separately by MotionProvider's reducedMotion="user", which resolves
+   the preference at animation time so server and client render the same HTML. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  html { scroll-behavior: auto; }
+}
 
 /* ── Input fintech style ───────────────────────── */
 .input-dark {
@@ -362,6 +423,80 @@ h1, h2, h3, h4, .font-serif {
   border-color: rgba(201,169,97,0.5);
   box-shadow: 0 0 0 3px rgba(201,169,97,0.08);
 }
+
+/* ── Marketing surfaces ────────────────────────── */
+/* The marketing site sits on the same near-black ramp as the dashboard so
+   moving between them doesn't feel like two products. */
+.marketing-page {
+  background: var(--surface-0);
+  color: var(--text-primary);
+}
+
+/* Section eyebrow — small caps label above a heading. */
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-quaternary);
+}
+
+/* Long-form legal/article body. Applied to a wrapper so the prose inside can
+   stay plain HTML instead of every <p> carrying six utility classes. */
+.prose-vodium {
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1.7;
+}
+.prose-vodium h2 {
+  font-family: var(--font-playfair), "Playfair Display", var(--font-inter), Inter, serif;
+  font-size: 20px;
+  color: var(--text-primary);
+  margin-top: 2.5rem;
+  margin-bottom: 0.75rem;
+  letter-spacing: -0.011em;
+}
+.prose-vodium h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 1.75rem;
+  margin-bottom: 0.5rem;
+}
+.prose-vodium p { margin-bottom: 1rem; }
+.prose-vodium ul { list-style: disc; padding-left: 1.25rem; margin-bottom: 1rem; }
+.prose-vodium li { margin-bottom: 0.375rem; }
+.prose-vodium li::marker { color: var(--text-quaternary); }
+.prose-vodium strong { color: var(--text-primary); font-weight: 600; }
+.prose-vodium a {
+  color: var(--vodium-gold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(201, 169, 97, 0.35);
+  transition: text-decoration-color 120ms ease;
+}
+.prose-vodium a:hover { text-decoration-color: var(--vodium-gold); }
+/* Legal documents carry the occasional data table (purpose / legal basis).
+   Wrap it in `.prose-scroll` so a narrow phone scrolls the table, not the page. */
+.prose-vodium table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+  font-size: 14px;
+}
+.prose-vodium th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 0.5rem 1rem 0.5rem 0;
+  border-bottom: 1px solid var(--hairline-strong);
+}
+.prose-vodium td {
+  padding: 0.625rem 1rem 0.625rem 0;
+  border-bottom: 1px solid var(--hairline);
+  vertical-align: top;
+}
+.prose-scroll { overflow-x: auto; }
 
 /* ── Grid pattern ──────────────────────────────── */
 .bg-grid {

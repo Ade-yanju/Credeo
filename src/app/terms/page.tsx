@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { FileText, ArrowLeft } from "lucide-react";
+import { LegalPage, LegalSection as Section } from "@/components/marketing/legal-page";
 
 export const metadata = {
   title: "Terms of Service : Vodium Ledger",
@@ -10,67 +9,13 @@ export default function TermsPage() {
   const EFFECTIVE = "1 June 2026";
   const EMAIL = "legal@vodiumledger.com";
 
-  const Section = ({
-    title,
-    children,
-  }: {
-    title: string;
-    children: React.ReactNode;
-  }) => (
-    <section className="mb-10">
-      <h2 className="font-serif text-xl text-vodium-black mb-3">{title}</h2>
-      <div className="text-vodium-black/65 text-[15px] leading-relaxed space-y-3">
-        {children}
-      </div>
-    </section>
-  );
 
   return (
-    <div className="min-h-screen bg-vodium-cream">
-      {/* Nav */}
-      <nav className="border-b border-black/[0.06] bg-white/80 backdrop-blur-md sticky top-0 z-20 pt-safe px-safe">
-        <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-8 h-8 rounded-full bg-vodium-black border border-vodium-gold/40 flex items-center justify-center">
-              <span className="font-serif text-vodium-gold text-sm leading-none">
-                V
-              </span>
-            </div>
-            <span className="font-serif tracking-[0.18em] text-vodium-black text-xs">
-              VODIUM LEDGER
-            </span>
-          </Link>
-          <Link
-            href="/"
-            className="flex items-center gap-1.5 text-sm text-vodium-black/50 hover:text-vodium-black transition-colors"
-          >
-            <ArrowLeft size={14} /> Back
-          </Link>
-        </div>
-      </nav>
-
-      <main className="max-w-3xl mx-auto px-6 py-16 md:py-24">
-        {/* Header */}
-        <div className="mb-12">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-10 h-10 rounded-xl bg-vodium-gold/10 border border-vodium-gold/20 flex items-center justify-center">
-              <FileText size={18} className="text-vodium-gold" />
-            </div>
-            <span className="text-vodium-gold text-xs tracking-[0.3em] uppercase font-semibold">
-              Legal
-            </span>
-          </div>
-          <h1 className="font-serif text-4xl md:text-5xl text-vodium-black mb-4 leading-tight">
-            Terms of Service
-          </h1>
-          <p className="text-vodium-black/40 text-sm">
-            Effective:{" "}
-            <strong className="text-vodium-black/60">{EFFECTIVE}</strong>
-            &nbsp;·&nbsp;Governed by the laws of the Federal Republic of Nigeria
-          </p>
-        </div>
-
-        <div className="brand-divider mb-10" />
+    <LegalPage
+      title="Terms of Service"
+      effective={EFFECTIVE}
+      meta="Governed by Nigerian law"
+    >
 
         <Section title="Acceptance of terms">
           <p>
@@ -90,7 +35,7 @@ export default function TermsPage() {
             Vodium Ledger provides Nigerian campus vendors with software tools
             to:
           </p>
-          <ul className="list-disc pl-5 space-y-1.5">
+          <ul>
             <li>Record and track credit extended to student customers</li>
             <li>
               Send automated WhatsApp reminders to students before repayment due
@@ -111,7 +56,7 @@ export default function TermsPage() {
         </Section>
 
         <Section title="Eligibility and accounts">
-          <ul className="list-disc pl-5 space-y-2">
+          <ul>
             <li>
               You must be at least 18 years old and operate a legitimate
               business to create a vendor account.
@@ -132,25 +77,25 @@ export default function TermsPage() {
         </Section>
 
         <Section title="Subscription and payment">
-          <ul className="list-disc pl-5 space-y-2">
+          <ul>
             <li>
-              <strong className="text-vodium-black">Free trial:</strong> All new
+              <strong>Free trial:</strong> All new
               accounts receive a 60-day free trial of the Starter plan. No
               payment method required to start.
             </li>
             <li>
-              <strong className="text-vodium-black">Billing:</strong> After the
+              <strong>Billing:</strong> After the
               trial, a subscription is required to continue using the platform.
               Plans are billed monthly in Nigerian Naira (₦) through Paystack.
             </li>
             <li>
-              <strong className="text-vodium-black">Refunds:</strong> Due to the
+              <strong>Refunds:</strong> Due to the
               nature of software services, we do not offer refunds on paid
               subscription months. If you cancel, your access continues until
               the end of the billing period.
             </li>
             <li>
-              <strong className="text-vodium-black">Price changes:</strong> We
+              <strong>Price changes:</strong> We
               will give at least 30 days notice before increasing subscription
               prices. You may cancel before the increase takes effect.
             </li>
@@ -158,14 +103,14 @@ export default function TermsPage() {
         </Section>
 
         <Section title="Your data and student data">
-          <ul className="list-disc pl-5 space-y-2">
+          <ul>
             <li>
-              <strong className="text-vodium-black">Your credit records</strong>{" "}
+              <strong>Your credit records</strong>{" "}
               belong to you. You can export them at any time via the dashboard
               CSV export.
             </li>
             <li>
-              <strong className="text-vodium-black">
+              <strong>
                 Student data you enter
               </strong>{" "}
               is your responsibility. You represent that you have a legitimate
@@ -174,7 +119,7 @@ export default function TermsPage() {
               recovery purposes.
             </li>
             <li>
-              <strong className="text-vodium-black">Vodium Score:</strong> We
+              <strong>Vodium Score:</strong> We
               aggregate repayment signals across the network to compute a
               proprietary credit quality score. By using the platform, you grant
               Vodium a licence to use your anonymised credit event data to
@@ -191,7 +136,7 @@ export default function TermsPage() {
 
         <Section title="Acceptable use">
           <p>You agree not to:</p>
-          <ul className="list-disc pl-5 space-y-1.5">
+          <ul>
             <li>
               Use the platform for any unlawful purpose under Nigerian law
             </li>
@@ -217,7 +162,7 @@ export default function TermsPage() {
 
         <Section title="WhatsApp messaging">
           <p>By using the reminder feature, you agree that:</p>
-          <ul className="list-disc pl-5 space-y-1.5">
+          <ul>
             <li>
               You have a legitimate basis to contact the student (i.e., they owe
               you money under an agreed credit arrangement)
@@ -264,15 +209,15 @@ export default function TermsPage() {
         </Section>
 
         <Section title="Account termination">
-          <ul className="list-disc pl-5 space-y-2">
+          <ul>
             <li>
-              <strong className="text-vodium-black">By you:</strong> You may
+              <strong>By you:</strong> You may
               delete your account at any time from Settings → Danger zone. We
               will purge your data within 30 days, subject to legal retention
               requirements.
             </li>
             <li>
-              <strong className="text-vodium-black">By us:</strong> We may
+              <strong>By us:</strong> We may
               suspend or terminate accounts that violate these Terms, fail to
               pay subscription fees after a grace period, or are used for
               fraudulent purposes. We will give 7 days notice except in cases of
@@ -305,7 +250,6 @@ export default function TermsPage() {
             Legal:{" "}
             <a
               href={`mailto:${EMAIL}`}
-              className="text-vodium-gold hover:underline"
             >
               {EMAIL}
             </a>
@@ -313,7 +257,6 @@ export default function TermsPage() {
             Support:{" "}
             <a
               href="mailto:hello@vodiumledger.com"
-              className="text-vodium-gold hover:underline"
             >
               hello@vodiumledger.com
             </a>
@@ -322,12 +265,6 @@ export default function TermsPage() {
           </p>
         </Section>
 
-        <div className="brand-divider mt-12 mb-8" />
-        <p className="text-vodium-black/30 text-xs text-center">
-          © 2026 VODIUMX TECHNOLOGIES LTD (RC: 8976921) · Lagos, Nigeria · All rights
-          reserved
-        </p>
-      </main>
-    </div>
+    </LegalPage>
   );
 }
