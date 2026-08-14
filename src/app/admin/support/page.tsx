@@ -32,6 +32,7 @@ interface VendorRow {
   overdueCount: number;
   totalOwed: number;
 }
+interface ProspectRow { id: string; ownerName: string; businessName: string; phone: string; email: string; expiresAt: string; claimedAt: string | null; claimedVendorId: string | null; claimedVendorName: string | null; }
 
 const STATUS_COLOR: Record<string, string> = {
   ACTIVE: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
@@ -49,6 +50,7 @@ const SUB_LABELS: Record<string, string> = {
 
 export default function SupportPage() {
   const [vendors, setVendors] = useState<VendorRow[]>([]);
+  const [prospects, setProspects] = useState<ProspectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<
@@ -102,6 +104,8 @@ export default function SupportPage() {
         setVendors(data.vendors);
         setStats(data.stats);
       }
+      const prospectRes = await fetch("/api/admin/support/prospects");
+      if (prospectRes.ok) setProspects((await prospectRes.json()).prospects);
     } finally {
       setLoading(false);
     }
@@ -181,7 +185,9 @@ export default function SupportPage() {
         </div>
       )}
 
-      {showProspectForm && <ProspectForm onClose={() => setShowProspectForm(false)} />}
+      {showProspectForm && <ProspectForm onClose={() => { setShowProspectForm(false); loadVendors(); }} />}
+
+      {prospects.length > 0 && <div className="rounded-2xl border border-white/[0.06] bg-vodium-charcoal overflow-hidden"><div className="px-5 py-3 border-b border-white/[0.06]"><h2 className="font-serif text-lg text-vodium-cream">Prospect onboarding</h2><p className="text-xs text-vodium-cream/40 mt-0.5">Customer-care claim links and completed accounts.</p></div><div className="divide-y divide-white/[0.04]">{prospects.map((p) => { const expired = !p.claimedAt && new Date(p.expiresAt) < new Date(); return <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"><div><p className="text-sm text-vodium-cream">{p.businessName} <span className="text-vodium-cream/40">· {p.ownerName}</span></p><p className="text-xs text-vodium-cream/40">{p.phone} · {p.email}</p></div>{p.claimedAt ? <div className="text-right"><p className="text-xs font-semibold text-emerald-300">Onboarded</p><a href={p.claimedVendorId ? `/admin/vendors/${p.claimedVendorId}` : undefined} className="text-xs text-vodium-gold hover:underline">{p.claimedVendorName ?? "View vendor"}</a></div> : <p className={`text-xs font-semibold ${expired ? "text-rose-300" : "text-amber-300"}`}>{expired ? "Claim link expired" : "Pending claim"}</p>}</div>; })}</div></div>}
 
       {/* Stats strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

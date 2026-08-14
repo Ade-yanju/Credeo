@@ -12,6 +12,17 @@ const schema = z.object({
   email: z.string().trim().email().max(255).transform((value) => value.toLowerCase()),
 });
 
+export async function GET() {
+  const session = getAdminSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!["SUPER_ADMIN", "CUSTOMER_CARE"].includes(session.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const prospects = await prisma.vendorProspect.findMany({ orderBy: { createdAt: "desc" }, take: 100 });
+  const ids = prospects.flatMap((p) => p.claimedVendorId ? [p.claimedVendorId] : []);
+  const vendors = ids.length ? await prisma.vendor.findMany({ where: { id: { in: ids } }, select: { id: true, businessName: true } }) : [];
+  const names = new Map(vendors.map((v) => [v.id, v.businessName]));
+  return NextResponse.json({ prospects: prospects.map((p) => ({ id: p.id, ownerName: p.ownerName, businessName: p.businessName, phone: p.phone, email: p.email, createdAt: p.createdAt, expiresAt: p.claimTokenExpiresAt, claimedAt: p.claimedAt, claimedVendorId: p.claimedVendorId, claimedVendorName: p.claimedVendorId ? names.get(p.claimedVendorId) ?? null : null })) });
+}
+
 /** Customer Care creates a claimable prospect; it is not yet a vendor account. */
 export async function POST(req: NextRequest) {
   const session = getAdminSession();
