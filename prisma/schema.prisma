@@ -258,6 +258,28 @@ model Vendor {
   @@index([referredByAmbassadorId])
 }
 
+/// A customer-care-created lead. This is intentionally separate from Vendor:
+/// a prospect has no login, no subscription, and starts no trial until the
+/// owner claims the one-time link and completes onboarding.
+model VendorProspect {
+  id                String   @id @default(cuid())
+  ownerName         String
+  businessName      String
+  phone             String   @unique
+  email             String   @unique
+  claimToken        String   @unique
+  claimTokenExpiresAt DateTime
+  claimedAt         DateTime?
+  claimedVendorId   String?  @unique
+  createdByAdminId  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([claimToken])
+  @@index([claimedAt])
+  @@index([createdByAdminId])
+}
+
 enum VendorType {
   PROVISION_SHOP
   FOOD_CANTEEN
