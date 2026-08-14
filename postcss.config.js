@@ -1,6 +1,8 @@
-module.exports = {
+/** Originkit — Tailwind v4 (required for section @theme tokens). */
+const config = {
   plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
+    "@tailwindcss/postcss": {},
   },
 };
+
+export default config;

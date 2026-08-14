@@ -42,6 +42,7 @@ import {
 } from "../../../lib/whatsapp/voice-intake";
 import { rescueUnknownMessage } from "../../../lib/whatsapp/ai-fallback";
 import { getOrgChannelCredentials } from "../../../lib/whatsapp/channel-token";
+import { sendCreditLoggedNotification } from "../../../lib/whatsapp/credit-notification-delivery";
 import { contactPhoneFrom } from "../../../lib/whatsapp/contact";
 import { parseCommunity } from "../../../lib/community";
 import { createSoloOrganizationForVendor, trialEndsAt } from "../../../lib/tenant";
@@ -760,7 +761,7 @@ const ADD_AGAIN_BUTTONS: WhatsAppButton[] = [
  *  direct path and the post-verification path. */
 async function finalizeCredit(input: {
   vendorId: string;
-  vendor: { organizationId: string | null; branchId: string | null };
+  vendor: { organizationId: string | null; branchId: string | null; businessName: string };
   studentId: string;
   customerName: string;
   amount: number;
@@ -768,7 +769,7 @@ async function finalizeCredit(input: {
   remindersEnabled: boolean;
 }) {
   const dueDate = new Date(Date.now() + input.dueInMinutes * 60_000);
-  await prisma.credit.create({
+  const credit = await prisma.credit.create({
     data: {
       vendorId: input.vendorId,
       organizationId: input.vendor.organizationId,
@@ -779,6 +780,7 @@ async function finalizeCredit(input: {
       status: "OUTSTANDING",
       remindersEnabled: input.remindersEnabled,
     },
+    include: { student: { select: { phone: true, fullName: true } } },
   });
   await prisma.creditScoreEvent.create({
     data: { studentId: input.studentId, vendorId: input.vendorId, eventType: "CREDIT_EXTENDED", amount: input.amount, scoreDelta: 0 },
@@ -790,6 +792,15 @@ async function finalizeCredit(input: {
       message: `₦${Number(input.amount).toLocaleString()} credit recorded for ${input.customerName} via WhatsApp.`,
       type: "INFO",
     },
+  });
+  await sendCreditLoggedNotification({
+    organizationId: input.vendor.organizationId,
+    phone: credit.student.phone,
+    customerName: credit.student.fullName,
+    shopName: input.vendor.businessName,
+    amount: input.amount,
+    loggedAt: credit.createdAt,
+    dueDate,
   });
 }
 
@@ -1138,7 +1149,7 @@ async function runSideEffect(
 
       await finalizeCredit({
         vendorId,
-        vendor: { organizationId: vendor.organizationId, branchId: vendor.branchId },
+        vendor: { organizationId: vendor.organizationId, branchId: vendor.branchId, businessName: vendor.businessName },
         studentId: customer.id,
         customerName,
         amount,
@@ -1198,7 +1209,7 @@ async function runSideEffect(
 
       await finalizeCredit({
         vendorId,
-        vendor: { organizationId: vendor.organizationId, branchId: vendor.branchId },
+        vendor: { organizationId: vendor.organizationId, branchId: vendor.branchId, businessName: vendor.businessName },
         studentId: customer.id,
         customerName: customer.fullName,
         amount,
@@ -1286,7 +1297,7 @@ async function runSideEffect(
       const remindersEnabled = sessionContext.pcReminders !== false;
       await finalizeCredit({
         vendorId,
-        vendor: { organizationId: vendor.organizationId, branchId: vendor.branchId },
+        vendor: { organizationId: vendor.organizationId, branchId: vendor.branchId, businessName: vendor.businessName },
         studentId: customer.id,
         customerName: customer.fullName,
         amount,
