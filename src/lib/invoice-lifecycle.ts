@@ -16,6 +16,7 @@ import { createReminderPrefResolver } from "@/lib/reminder-prefs";
 import { signInvoiceToken } from "@/lib/bnpl-token";
 import { formatNaira } from "@/lib/utils";
 import { sendCustomerInvoice } from "@/lib/whatsapp/invoice-delivery";
+import { isPlanActive } from "@/lib/plan";
 
 const REMINDER_INTERVAL_MS = 3 * 86_400_000; // re-remind at most every 3 days
 
@@ -50,7 +51,16 @@ export async function sendOverdueInvoiceReminders(scope: Scope = {}) {
         : { OR: [{ overdueReminderSentAt: null }, { overdueReminderSentAt: { lte: cutoff } }] }),
       student: { NOT: { phone: { startsWith: "pending:" } } },
     },
-    include: { student: true, organization: { select: { id: true, name: true } } },
+    include: {
+      student: true,
+      organization: {
+        select: {
+          id: true,
+          name: true,
+          vendors: { select: { subscription: { select: { status: true, trialEndsAt: true, currentPeriodEnd: true } } } },
+        },
+      },
+    },
     orderBy: { dueDate: "asc" },
     take: 500,
   });
@@ -72,6 +82,14 @@ export async function sendOverdueInvoiceReminders(scope: Scope = {}) {
   for (const invoice of invoices) {
     const outstanding = Number(invoice.total) - Number(invoice.amountPaid);
     if (outstanding <= 0) continue;
+
+    // An organisation can have several staff vendors; keep reminders running
+    // only while at least one of its subscriptions is active. A sole vendor
+    // whose trial expires therefore stops all automated invoice reminders.
+    if (!invoice.organization.vendors.some((vendor) => isPlanActive(vendor.subscription))) {
+      skipped++;
+      continue;
+    }
 
     // Merchant opted out of automated reminders.
     if (!scope.force && !(await remindersAllowed(invoice.organizationId, "overdue"))) {

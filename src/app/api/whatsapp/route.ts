@@ -43,6 +43,7 @@ import {
 import { rescueUnknownMessage } from "../../../lib/whatsapp/ai-fallback";
 import { getOrgChannelCredentials } from "../../../lib/whatsapp/channel-token";
 import { sendCreditLoggedNotification } from "../../../lib/whatsapp/credit-notification-delivery";
+import { isPlanActive } from "../../../lib/plan";
 import { contactPhoneFrom } from "../../../lib/whatsapp/contact";
 import { parseCommunity } from "../../../lib/community";
 import { createSoloOrganizationForVendor, trialEndsAt } from "../../../lib/tenant";
@@ -375,6 +376,28 @@ export async function POST(req: NextRequest) {
         creds
       );
       return NextResponse.json({ ok: true });
+    }
+
+    // Expired accounts retain their dashboard data, but their WhatsApp bot is
+    // read-only. Stop an in-progress ADD/INVOICE/import flow too, otherwise a
+    // vendor could begin before expiry and finish the paid action afterward.
+    const subscription = await prisma.vendorSubscription.findUnique({ where: { vendorId: vendor.id } });
+    if (!isPlanActive(subscription)) {
+      const allowed = ["HELP", "MENU", "COMMANDS", "DASHBOARD", "WEB", "PORTAL", "SUPPORT", "AGENT", "HUMAN"];
+      const command = messageText.trim().toUpperCase();
+      if (!allowed.includes(command)) {
+        await prisma.whatsAppSession.update({
+          where: { phone: fromPhone },
+          data: { state: "IDLE", context: {} },
+        });
+        await sendWhatsAppButtons(
+          fromPhone,
+          "Your free trial has ended. Your records are safe and you can still view them on the dashboard, but adding credits, invoices, imports, reminders and other bot actions are paused until you renew.",
+          [{ id: "DASHBOARD", title: "Open dashboard" }, { id: "SUPPORT", title: "Get support" }],
+          creds,
+        );
+        return NextResponse.json({ ok: true });
+      }
     }
 
     // ── Ledger book import ──────────────────────────────────────────────────
