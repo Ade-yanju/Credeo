@@ -18,7 +18,7 @@
  *   4. Dev fallback: log to server console.
  */
 
-import { sendWhatsAppMessage, sendWhatsAppTemplate, WhatsAppSendError } from "@/lib/whatsapp/outbound";
+import { sendWhatsAppTemplate, WhatsAppSendError } from "@/lib/whatsapp/outbound";
 
 /**
  * Meta template names are lowercase identifiers: letters, digits, underscores.
@@ -76,38 +76,19 @@ export function resolveConfiguredTemplateName(): string {
   return coerced;
 }
 
-export type OtpChannel = "whatsapp" | "console";
+export type OtpChannel = "whatsapp" | "console" | "failed";
 
 export async function sendOtpCode(input: {
   phone: string;
   code: string;
   storeName: string;
 }): Promise<{ channel: OtpChannel; delivered: boolean }> {
-  const { phone, code, storeName } = input;
+  const { phone, code } = input;
   const hasVodiumWa = process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID;
 
   if (hasVodiumWa) {
-    const freeText =
-      `${code} is your verification code for your ${storeName} order on Vodium Ledger. ` +
-      `It expires in 10 minutes. Do not share it.`;
-
-    // An OTP is worthless late, so if a 24-hour window is already open we send
-    // the code as free text immediately and skip the template round-trip
-    // entirely. Out of session, only the approved AUTHENTICATION template will
-    // actually be delivered by Meta.
-    const { hasOpenSession } = await import("@/lib/whatsapp/session-window");
-    if (await hasOpenSession(phone)) {
-      try {
-        await sendWhatsAppMessage(phone, freeText);
-        return { channel: "whatsapp", delivered: true };
-      } catch (err) {
-        console.warn("[otp] in-session free-text failed, trying template:", err);
-      }
-    }
-
-    // 1) Approved OTP template (the only path that reaches a number with no
-    // open 24-hour session — i.e. any first-time customer). Falls back to the
-    // platform default name, which the admin console can create in one click.
+    // Always use the approved AUTHENTICATION template. This gives credit
+    // logging one delivery path both inside and outside the 24-hour window.
     const templateName = resolveConfiguredTemplateName();
 
     {
@@ -150,19 +131,8 @@ export async function sendOtpCode(input: {
       }
     }
 
-    // 2) Last resort: free text with no open session. Meta accepts this and
-    // then silently drops it, so we report delivered=false — callers must not
-    // tell the customer "code sent" on the strength of this.
-    try {
-      await sendWhatsAppMessage(phone, freeText);
-      console.warn(
-        `[otp] sent free-text OTP to ${phone} with no open session and no usable template — ` +
-        `Meta will most likely DROP this silently. Approve the OTP template to fix delivery.`,
-      );
-      return { channel: "whatsapp", delivered: false };
-    } catch (err) {
-      console.warn("[otp] WhatsApp free-text failed:", err);
-    }
+    console.error(`[otp] no approved template delivered to ${phone}; OTP was not sent.`);
+    return { channel: "failed", delivered: false };
   }
 
   // 3) Fallback: only print the code outside production (or when debug is on).
