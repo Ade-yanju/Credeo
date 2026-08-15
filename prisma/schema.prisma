@@ -25,6 +25,7 @@ model Community {
   vendors  Vendor[]
   students Student[]
   organizations Organization[]
+  acquisitionProspects AcquisitionProspect[]
 }
 
 // ─────────────────────────────────────────────
@@ -249,6 +250,7 @@ model Vendor {
   invoices      Invoice[]
   disputes      Dispute[]
   paymentReceipts PaymentReceipt[]
+  acquisitionProspect AcquisitionProspect?
 
   @@index([communityId])
   @@index([organizationId])
@@ -933,6 +935,7 @@ model Ambassador {
   updatedAt   DateTime         @updatedAt
 
   vendors     Vendor[]
+  acquisitionProspects AcquisitionProspect[]
 
   @@index([status])
   @@index([code])
@@ -952,11 +955,155 @@ model AdminUser {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  capturedProspects     AcquisitionProspect[] @relation("ProspectCapturedBy")
+  assignedProspects     AcquisitionProspect[] @relation("ProspectAssignedTo")
+  acquisitionActivities AcquisitionActivity[]
+  acquisitionCampaigns  AcquisitionCampaign[] @relation("CampaignOwner")
+
   @@index([email])
   @@index([inviteToken])
 }
 
 // ─────────────────────────────────────────────
+// MERCHANT ACQUISITION
+// A prospect is deliberately separate from Vendor. It can only become a Vendor
+// through the normal registration flow or an explicit admin match.
+model AcquisitionProspect {
+  id                  String                            @id @default(cuid())
+  businessName        String
+  contactName         String?
+  phone               String?
+  email               String?
+  vendorType          VendorType?
+  communityId         String?
+  community           Community?                        @relation(fields: [communityId], references: [id], onDelete: SetNull)
+  locationText        String?
+  city                String?
+  state               String?
+  businessSize        AcquisitionBusinessSize           @default(UNKNOWN)
+  transactionVolumeBand AcquisitionTransactionVolumeBand @default(UNKNOWN)
+  creditBehavior      AcquisitionCreditBehavior         @default(UNKNOWN)
+  whatsAppUsage       AcquisitionWhatsAppUsage          @default(UNKNOWN)
+  fit                 AcquisitionFit                    @default(MEDIUM)
+  fitNotes            String?
+
+  source              AcquisitionSource
+  sourceDetail        String?
+  campaignId          String?
+  campaign            AcquisitionCampaign?              @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  ambassadorId        String?
+  ambassador          Ambassador?                        @relation(fields: [ambassadorId], references: [id], onDelete: SetNull)
+  capturedByAdminId   String?
+  capturedBy          AdminUser?                         @relation("ProspectCapturedBy", fields: [capturedByAdminId], references: [id], onDelete: SetNull)
+  assignedToAdminId   String?
+  assignedTo          AdminUser?                         @relation("ProspectAssignedTo", fields: [assignedToAdminId], references: [id], onDelete: SetNull)
+
+  stage               AcquisitionStage                  @default(IDENTIFIED)
+  priority            AcquisitionPriority               @default(NORMAL)
+  nextActionType      AcquisitionNextActionType?
+  nextActionAt        DateTime?
+  nextActionNote      String?
+  lastContactedAt     DateTime?
+  contactAttempts     Int                               @default(0)
+  lossReason          String?
+  unqualifiedReason   String?
+
+  convertedVendorId   String?                           @unique
+  convertedVendor     Vendor?                           @relation(fields: [convertedVendorId], references: [id], onDelete: SetNull)
+  convertedAt         DateTime?
+  identifiedAt        DateTime                          @default(now())
+  contactedAt         DateTime?
+  respondedAt         DateTime?
+  qualifiedAt         DateTime?
+  demoScheduledAt     DateTime?
+  demoCompletedAt     DateTime?
+  onboardingStartedAt DateTime?
+  activatedAt         DateTime?
+  wonAt               DateTime?
+  lostAt              DateTime?
+  createdAt           DateTime                          @default(now())
+  updatedAt           DateTime                          @updatedAt
+
+  activities          AcquisitionActivity[]
+
+  @@index([stage])
+  @@index([assignedToAdminId, nextActionAt])
+  @@index([source])
+  @@index([campaignId])
+  @@index([ambassadorId])
+  @@index([communityId])
+  @@index([phone])
+  @@index([email])
+  @@index([createdAt])
+}
+
+enum AcquisitionSource {
+  GOOGLE_BUSINESS
+  SOCIAL_MEDIA
+  AMBASSADOR_REFERRAL
+  DIRECT_OUTBOUND
+  EVENT_COMMUNITY
+  PARTNERSHIP
+  MANUAL_ENTRY
+  OTHER
+}
+
+enum AcquisitionBusinessSize { SOLO MICRO SMALL MEDIUM LARGE UNKNOWN }
+enum AcquisitionTransactionVolumeBand { VERY_LOW LOW MEDIUM HIGH VERY_HIGH UNKNOWN }
+enum AcquisitionCreditBehavior { NONE PAPER_LEDGER SPREADSHEET WHATSAPP DIGITAL_TOOL UNKNOWN }
+enum AcquisitionWhatsAppUsage { ACTIVE_PERSONAL WHATSAPP_BUSINESS LIMITED NONE UNKNOWN }
+enum AcquisitionFit { HIGH MEDIUM LOW UNQUALIFIED }
+enum AcquisitionStage { IDENTIFIED CONTACTED RESPONDED QUALIFIED DEMO_SCHEDULED DEMO_COMPLETED ONBOARDING ACTIVATED WON LOST UNQUALIFIED }
+enum AcquisitionPriority { LOW NORMAL HIGH }
+enum AcquisitionNextActionType { CALL WHATSAPP EMAIL MEETING DEMO VISIT RESEARCH OTHER }
+
+model AcquisitionActivity {
+  id                String                  @id @default(cuid())
+  prospectId        String
+  prospect          AcquisitionProspect     @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  type              AcquisitionActivityType
+  outcome           String?
+  body              String?
+  stageFrom         AcquisitionStage?
+  stageTo           AcquisitionStage?
+  nextActionAt      DateTime?
+  occurredAt        DateTime                @default(now())
+  createdByAdminId  String?
+  createdBy         AdminUser?              @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  createdAt         DateTime                @default(now())
+
+  @@index([prospectId, occurredAt])
+  @@index([createdByAdminId])
+  @@index([type])
+}
+
+enum AcquisitionActivityType { NOTE CALL WHATSAPP EMAIL MEETING DEMO STATUS_CHANGE FOLLOW_UP_COMPLETED SYSTEM_SYNC }
+
+model AcquisitionCampaign {
+  id                String                    @id @default(cuid())
+  name              String
+  source            AcquisitionSource
+  status            AcquisitionCampaignStatus @default(DRAFT)
+  startAt           DateTime?
+  endAt             DateTime?
+  ownerAdminId      String?
+  owner             AdminUser?                @relation("CampaignOwner", fields: [ownerAdminId], references: [id], onDelete: SetNull)
+  budgetAmount      Decimal?                  @db.Decimal(12, 2)
+  actualSpendAmount Decimal?                  @db.Decimal(12, 2)
+  notes             String?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  prospects         AcquisitionProspect[]
+
+  @@index([status])
+  @@index([source])
+  @@index([ownerAdminId])
+  @@index([startAt])
+}
+
+enum AcquisitionCampaignStatus { DRAFT ACTIVE PAUSED COMPLETED }
+
 // AUDIT LOG
 // ─────────────────────────────────────────────
 

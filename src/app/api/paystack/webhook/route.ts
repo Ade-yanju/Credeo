@@ -6,6 +6,7 @@ import {
   parseMetadata,
   type PaystackPaymentData,
 } from "@/lib/paystack/subscription";
+import { syncProspectLifecycleForVendor } from "@/lib/acquisition";
 
 interface PaystackData extends PaystackPaymentData {
   subscription_code?: string;
@@ -115,6 +116,10 @@ export async function POST(req: NextRequest) {
         });
         if (!activated.ok) {
           console.error("[paystack/webhook] charge.success not activated:", activated.error);
+        } else {
+          void syncProspectLifecycleForVendor(metadata.vendorId).catch((err) =>
+            console.error("[paystack/webhook] acquisition lifecycle sync failed:", err)
+          );
         }
       }
       break;

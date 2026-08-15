@@ -21,6 +21,7 @@ import {
   Building2,
   ShieldAlert,
   Megaphone,
+  Target,
 } from "lucide-react";
 import type { AdminRole } from "@/lib/session";
 
@@ -58,6 +59,7 @@ const NAV_BY_ROLE: Record<
     { href: "/admin/support", icon: Headphones, label: "Support" },
     { href: "/admin/disputes", icon: ShieldAlert, label: "Disputes" },
     { href: "/admin/marketing", icon: Megaphone, label: "Marketing" },
+    { href: "/admin/acquisition", icon: Target, label: "Acquisition" },
     { href: "/admin/analytics", icon: BarChart3, label: "Analytics" },
     { href: "/admin/team", icon: Users, label: "Team" },
   ],
@@ -75,10 +77,12 @@ const NAV_BY_ROLE: Record<
   ANALYTICS: [
     { href: "/admin", icon: LayoutDashboard, label: "Overview" },
     { href: "/admin/analytics", icon: BarChart3, label: "Analytics" },
+    { href: "/admin/acquisition", icon: Target, label: "Acquisition" },
   ],
   MARKETING: [
     { href: "/admin", icon: LayoutDashboard, label: "Overview" },
     { href: "/admin/marketing", icon: Megaphone, label: "Marketing" },
+    { href: "/admin/acquisition", icon: Target, label: "Acquisition" },
   ],
 };
 

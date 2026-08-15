@@ -12,6 +12,7 @@ import { vendorKnowsCustomer, maskPhone } from "@/lib/customer-verify";
 import { sendOtpCode } from "@/lib/otp-delivery";
 import { setOtpCookie, verifyOtpCookie, clearOtpCookie } from "@/lib/otp-cookie";
 import type { CreditStatus } from "@prisma/client";
+import { syncProspectLifecycleForVendor } from "@/lib/acquisition";
 
 const VERIFY_PURPOSE = "credit-verify";
 
@@ -281,6 +282,12 @@ export async function POST(req: NextRequest) {
       scoreDelta: 0,
     },
   });
+
+  // If this vendor originated from acquisition, their first real ledger entry
+  // is the product-defined activation event.
+  void syncProspectLifecycleForVendor(vendor.id).catch((err) =>
+    console.error("[credits] acquisition lifecycle sync failed:", err)
+  );
 
   return NextResponse.json({ ok: true, credit }, { status: 201 });
 }

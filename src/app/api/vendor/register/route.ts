@@ -12,6 +12,7 @@ import { sendOtpEmail } from "@/lib/email/otp";
 import { setVendorSession } from "@/lib/session";
 import { createSoloOrganizationForVendor, trialEndsAt } from "@/lib/tenant";
 import { setOtpCookie, verifyOtpCookie, clearOtpCookie } from "@/lib/otp-cookie";
+import { linkProspectToVendor, verifyAcquisitionRegistrationToken } from "@/lib/acquisition";
 
 // ─── shared form schema ───────────────────────────────────────────────────────
 
@@ -29,6 +30,7 @@ const formSchema = z.object({
   phone:          z.string().min(7).max(20),
   email:          z.string().trim().email().max(255).toLowerCase(),
   password:       z.string().min(8, "Password must be at least 8 characters").max(128),
+  acquisitionToken: z.string().max(2000).optional(),
 });
 
 const verifySchema = formSchema.extend({
@@ -115,7 +117,7 @@ async function handleVerify(json: unknown) {
 
   const {
     businessName, vendorType, location, community,
-    ownerName, phone, email, password, otp,
+    ownerName, phone, email, password, otp, acquisitionToken,
   } = parsed.data;
 
   // Rate-limit OTP guesses (best-effort — no-ops if Redis is down).
@@ -196,6 +198,15 @@ async function handleVerify(json: unknown) {
   });
 
   await createSoloOrganizationForVendor(vendor);
+
+  // This link is deliberately best-effort: a stale acquisition token must never
+  // block a legitimate merchant registration, and it can be matched manually.
+  const prospectId = verifyAcquisitionRegistrationToken(acquisitionToken);
+  if (prospectId) {
+    await linkProspectToVendor(prospectId, vendor.id).catch((err) =>
+      console.error("[register] acquisition link failed:", err)
+    );
+  }
 
   setVendorSession(normalisedPhone);
 
