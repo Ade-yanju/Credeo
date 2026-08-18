@@ -41,6 +41,19 @@
   /* Elevation — restrained. Ambient occlusion, not a glow. */
   --elev-1: 0 1px 2px rgba(0, 0, 0, 0.30);
   --elev-2: 0 4px 16px -4px rgba(0, 0, 0, 0.45);
+
+  /* ── Band inks ───────────────────────────────────
+     Tokens whose value depends on whether the section around them is painted
+     dark or light. Gold is the reason this tier exists: #C9A961 clears ~7:1 on
+     the near-black ramp but only ~2:1 on white, so the gold heading that reads
+     as premium on a dark band is close to invisible on a light one.
+     `--gold-ink` is the *text* gold and darkens on light bands;
+     `--vodium-gold` stays the fill/accent gold and never moves. Status hues
+     have the same problem — the dark ramp's greens and reds are lightened for
+     contrast against black and wash out on white. */
+  --gold-ink: var(--vodium-gold);
+  --ink-positive: #56C963;
+  --ink-negative: #F0736B;
 }
 
 /* ── Mobile safe areas (PWA / notches / home indicator) ── */
@@ -431,6 +444,66 @@ h1, h2, h3, h4, .font-serif {
    moving between them doesn't feel like two products. */
 .marketing-page {
   background: var(--surface-0);
+  color: var(--text-primary);
+}
+
+/* ── Bands ─────────────────────────────────────────
+   The landing page alternates painted bands down its length — white, black,
+   and one full-bleed gold at the close — instead of running edge to edge on a
+   single near-black canvas.
+
+   Each band redefines the surface, hairline and text ramps *on the wrapper*, so
+   every token-driven descendant inside inverts with it. That's the whole point
+   of the mechanism: the dashboard mockup, ledger table, pricing cards and
+   avatar row are all already written against these tokens, so they follow the
+   band they're dropped into and need no light-mode variant of their own. Only
+   art with a fixed physical identity (the hero card fan, the WhatsApp mockup's
+   own palette) hardcodes its colours, which is correct — those don't invert. */
+.band-light {
+  --surface-0: #FFFFFF;
+  --surface-1: #FBFAF7;
+  --surface-2: #F3F1EB;
+  --surface-3: #E9E6DD;
+
+  --hairline: rgba(10, 10, 10, 0.10);
+  --hairline-strong: rgba(10, 10, 10, 0.16);
+
+  /* Dark text with alpha, mirroring the dark ramp's four steps. Measured over
+     #FFF, every step clears AA for small text: 17.4 / 9.4 / 6.3 / 4.9. The dark
+     ramp's own tertiary and quaternary sit nearer 4:1 and 2.5:1, so this is the
+     stricter of the two — the lower half is spaced wider than a straight
+     mirror of the dark values would give, because alpha over white darkens far
+     more slowly than the same alpha over near-black lightens. */
+  --text-primary: #121212;
+  --text-secondary: rgba(18, 18, 18, 0.78);
+  --text-tertiary: rgba(18, 18, 18, 0.68);
+  --text-quaternary: rgba(18, 18, 18, 0.60);
+
+  --gold-ink: #8A6A2A;
+  --ink-positive: #197B33;
+  --ink-negative: #B93227;
+
+  background: var(--surface-0);
+  color: var(--text-primary);
+}
+
+/* Gold gets one full-bleed moment rather than only ever appearing as an accent.
+   Ink inverts to black — cream on gold is about 1.4:1. */
+.band-gold {
+  --surface-1: rgba(255, 255, 255, 0.16);
+  --surface-2: rgba(255, 255, 255, 0.10);
+
+  --hairline: rgba(10, 10, 10, 0.16);
+  --hairline-strong: rgba(10, 10, 10, 0.24);
+
+  --text-primary: #0A0A0A;
+  --text-secondary: rgba(10, 10, 10, 0.74);
+  --text-tertiary: rgba(10, 10, 10, 0.62);
+  --text-quaternary: rgba(10, 10, 10, 0.52);
+
+  --gold-ink: #0A0A0A;
+
+  background: linear-gradient(158deg, #E3CB8E, #C9A961 46%, #A5823C);
   color: var(--text-primary);
 }
 
