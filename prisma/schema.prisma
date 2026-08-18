@@ -1011,6 +1011,8 @@ model AcquisitionProspect {
   convertedVendorId   String?                           @unique
   convertedVendor     Vendor?                           @relation(fields: [convertedVendorId], references: [id], onDelete: SetNull)
   convertedAt         DateTime?
+  registrationTokenHash String?                         @unique
+  registrationTokenExpiresAt DateTime?
   identifiedAt        DateTime                          @default(now())
   contactedAt         DateTime?
   respondedAt         DateTime?
@@ -1048,14 +1050,78 @@ enum AcquisitionSource {
   OTHER
 }
 
-enum AcquisitionBusinessSize { SOLO MICRO SMALL MEDIUM LARGE UNKNOWN }
-enum AcquisitionTransactionVolumeBand { VERY_LOW LOW MEDIUM HIGH VERY_HIGH UNKNOWN }
-enum AcquisitionCreditBehavior { NONE PAPER_LEDGER SPREADSHEET WHATSAPP DIGITAL_TOOL UNKNOWN }
-enum AcquisitionWhatsAppUsage { ACTIVE_PERSONAL WHATSAPP_BUSINESS LIMITED NONE UNKNOWN }
-enum AcquisitionFit { HIGH MEDIUM LOW UNQUALIFIED }
-enum AcquisitionStage { IDENTIFIED CONTACTED RESPONDED QUALIFIED DEMO_SCHEDULED DEMO_COMPLETED ONBOARDING ACTIVATED WON LOST UNQUALIFIED }
-enum AcquisitionPriority { LOW NORMAL HIGH }
-enum AcquisitionNextActionType { CALL WHATSAPP EMAIL MEETING DEMO VISIT RESEARCH OTHER }
+enum AcquisitionBusinessSize {
+  SOLO
+  MICRO
+  SMALL
+  MEDIUM
+  LARGE
+  UNKNOWN
+}
+
+enum AcquisitionTransactionVolumeBand {
+  VERY_LOW
+  LOW
+  MEDIUM
+  HIGH
+  VERY_HIGH
+  UNKNOWN
+}
+
+enum AcquisitionCreditBehavior {
+  NONE
+  PAPER_LEDGER
+  SPREADSHEET
+  WHATSAPP
+  DIGITAL_TOOL
+  UNKNOWN
+}
+
+enum AcquisitionWhatsAppUsage {
+  ACTIVE_PERSONAL
+  WHATSAPP_BUSINESS
+  LIMITED
+  NONE
+  UNKNOWN
+}
+
+enum AcquisitionFit {
+  HIGH
+  MEDIUM
+  LOW
+  UNQUALIFIED
+}
+
+enum AcquisitionStage {
+  IDENTIFIED
+  CONTACTED
+  RESPONDED
+  QUALIFIED
+  DEMO_SCHEDULED
+  DEMO_COMPLETED
+  ONBOARDING
+  ACTIVATED
+  WON
+  LOST
+  UNQUALIFIED
+}
+
+enum AcquisitionPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+enum AcquisitionNextActionType {
+  CALL
+  WHATSAPP
+  EMAIL
+  MEETING
+  DEMO
+  VISIT
+  RESEARCH
+  OTHER
+}
 
 model AcquisitionActivity {
   id                String                  @id @default(cuid())
@@ -1077,7 +1143,17 @@ model AcquisitionActivity {
   @@index([type])
 }
 
-enum AcquisitionActivityType { NOTE CALL WHATSAPP EMAIL MEETING DEMO STATUS_CHANGE FOLLOW_UP_COMPLETED SYSTEM_SYNC }
+enum AcquisitionActivityType {
+  NOTE
+  CALL
+  WHATSAPP
+  EMAIL
+  MEETING
+  DEMO
+  STATUS_CHANGE
+  FOLLOW_UP_COMPLETED
+  SYSTEM_SYNC
+}
 
 model AcquisitionCampaign {
   id                String                    @id @default(cuid())
@@ -1102,7 +1178,12 @@ model AcquisitionCampaign {
   @@index([startAt])
 }
 
-enum AcquisitionCampaignStatus { DRAFT ACTIVE PAUSED COMPLETED }
+enum AcquisitionCampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
 
 // AUDIT LOG
 // ─────────────────────────────────────────────

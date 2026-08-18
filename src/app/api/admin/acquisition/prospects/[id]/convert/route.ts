@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAdminSession } from "@/lib/session";
-import { ACQUISITION_OPERATORS, acquisitionRegistrationUrl, linkProspectToVendor, syncProspectLifecycleForVendor } from "@/lib/acquisition";
+import { ACQUISITION_OPERATORS, acquisitionRegistrationUrl, issueAcquisitionRegistrationToken, linkProspectToVendor, syncProspectLifecycleForVendor } from "@/lib/acquisition";
 import { ipFromRequest, writeAudit } from "@/lib/audit";
 
 const schema = z.object({ vendorId: z.string().cuid().optional() });
@@ -15,7 +15,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!parsed.success) return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   const prospect = await prisma.acquisitionProspect.findUnique({ where: { id: params.id } });
   if (!prospect) return NextResponse.json({ error: "Prospect not found" }, { status: 404 });
-  if (!parsed.data.vendorId) return NextResponse.json({ registrationUrl: acquisitionRegistrationUrl(params.id) });
+  if (!parsed.data.vendorId) {
+    if (!prospect.phone && !prospect.email) {
+      return NextResponse.json({ error: "A prospect needs a verified phone or email before issuing a registration link." }, { status: 400 });
+    }
+    const token = await issueAcquisitionRegistrationToken(prospect.id);
+    return NextResponse.json({ registrationUrl: acquisitionRegistrationUrl(token) });
+  }
   const vendor = await prisma.vendor.findUnique({ where: { id: parsed.data.vendorId }, select: { id: true } });
   if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
   try {

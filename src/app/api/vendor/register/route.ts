@@ -12,7 +12,7 @@ import { sendOtpEmail } from "@/lib/email/otp";
 import { setVendorSession } from "@/lib/session";
 import { createSoloOrganizationForVendor, trialEndsAt } from "@/lib/tenant";
 import { setOtpCookie, verifyOtpCookie, clearOtpCookie } from "@/lib/otp-cookie";
-import { linkProspectToVendor, verifyAcquisitionRegistrationToken } from "@/lib/acquisition";
+import { linkProspectToVendor, registrationMatchesProspect } from "@/lib/acquisition";
 
 // ─── shared form schema ───────────────────────────────────────────────────────
 
@@ -201,7 +201,7 @@ async function handleVerify(json: unknown) {
 
   // This link is deliberately best-effort: a stale acquisition token must never
   // block a legitimate merchant registration, and it can be matched manually.
-  const prospectId = verifyAcquisitionRegistrationToken(acquisitionToken);
+  const prospectId = await registrationMatchesProspect(acquisitionToken, normalisedPhone, email);
   if (prospectId) {
     await linkProspectToVendor(prospectId, vendor.id).catch((err) =>
       console.error("[register] acquisition link failed:", err)

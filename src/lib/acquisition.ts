@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import type { AcquisitionStage } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export const ACQUISITION_OPERATORS = ["SUPER_ADMIN", "MARKETING"] as const;
@@ -9,7 +10,11 @@ export const ACTIVE_ACQUISITION_STAGES = [
   "DEMO_COMPLETED", "ONBOARDING", "ACTIVATED",
 ] as const;
 
-type RegistrationPayload = { prospectId: string; expiresAt: number };
+export function isTerminalAcquisitionStage(stage: string) {
+  return (TERMINAL_ACQUISITION_STAGES as readonly string[]).includes(stage);
+}
+
+const REGISTRATION_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 function acquisitionSecret() {
   const secret = process.env.SESSION_SECRET;
@@ -19,36 +24,40 @@ function acquisitionSecret() {
   return secret ?? "dev-only-secret-change-me-before-production";
 }
 
-export function signAcquisitionRegistrationToken(prospectId: string): string {
-  const payload: RegistrationPayload = { prospectId, expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000 };
-  const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
-  const signature = crypto.createHmac("sha256", acquisitionSecret())
-    .update("v1:acquisition-registration:" + encoded, "utf8").digest("base64url");
-  return encoded + "." + signature;
+function registrationTokenHash(token: string) {
+  return crypto.createHmac("sha256", acquisitionSecret())
+    .update("v2:acquisition-registration:" + token, "utf8").digest("base64url");
 }
 
-export function verifyAcquisitionRegistrationToken(token: string | undefined): string | null {
-  if (!token) return null;
-  try {
-    const dot = token.lastIndexOf(".");
-    if (dot < 1) return null;
-    const encoded = token.slice(0, dot);
-    const received = token.slice(dot + 1);
-    const expected = crypto.createHmac("sha256", acquisitionSecret())
-      .update("v1:acquisition-registration:" + encoded, "utf8").digest("base64url");
-    const a = Buffer.from(received);
-    const b = Buffer.from(expected);
-    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as RegistrationPayload;
-    return payload.prospectId && payload.expiresAt >= Date.now() ? payload.prospectId : null;
-  } catch {
-    return null;
-  }
+export async function issueAcquisitionRegistrationToken(prospectId: string): Promise<string> {
+  // The URL holds only an unguessable bearer value. The database retains an
+  // HMAC hash, expiry, and the prospect's contacts for server-side binding.
+  const token = crypto.randomBytes(32).toString("base64url");
+  await prisma.acquisitionProspect.update({
+    where: { id: prospectId },
+    data: {
+      registrationTokenHash: registrationTokenHash(token),
+      registrationTokenExpiresAt: new Date(Date.now() + REGISTRATION_TOKEN_TTL_MS),
+    },
+  });
+  return token;
 }
 
-export function acquisitionRegistrationUrl(prospectId: string): string {
+export function acquisitionRegistrationUrl(token: string): string {
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
-  return base + "/register?acq=" + encodeURIComponent(signAcquisitionRegistrationToken(prospectId));
+  return base + "/register?acq=" + encodeURIComponent(token);
+}
+
+export async function registrationMatchesProspect(token: string | undefined, phone: string, email: string): Promise<string | null> {
+  if (!token || token.length > 200) return null;
+  const prospect = await prisma.acquisitionProspect.findUnique({
+    where: { registrationTokenHash: registrationTokenHash(token) },
+    select: { id: true, phone: true, email: true, stage: true, registrationTokenExpiresAt: true },
+  });
+  if (!prospect || prospect.stage === "LOST" || prospect.stage === "UNQUALIFIED") return null;
+  if (!prospect.registrationTokenExpiresAt || prospect.registrationTokenExpiresAt < new Date()) return null;
+  if ((prospect.phone && prospect.phone !== phone) || (prospect.email && prospect.email !== email)) return null;
+  return prospect.id;
 }
 
 const STAGE_TIMESTAMPS: Partial<Record<string, string>> = {
@@ -66,6 +75,9 @@ export async function linkProspectToVendor(prospectId: string, vendorId: string,
   const now = new Date();
   const prospect = await prisma.acquisitionProspect.findUnique({ where: { id: prospectId } });
   if (!prospect) throw new Error("Prospect not found");
+  if (prospect.stage === "LOST" || prospect.stage === "UNQUALIFIED") {
+    throw new Error("A lost or unqualified prospect cannot be linked without being re-qualified first");
+  }
   if (prospect.convertedVendorId && prospect.convertedVendorId !== vendorId) {
     throw new Error("This prospect is already linked to another vendor");
   }
@@ -73,7 +85,15 @@ export async function linkProspectToVendor(prospectId: string, vendorId: string,
     const stage = prospect.stage === "WON" || prospect.stage === "ACTIVATED" ? prospect.stage : "ONBOARDING";
     const updated = await tx.acquisitionProspect.update({
       where: { id: prospectId },
-      data: { convertedVendorId: vendorId, convertedAt: prospect.convertedAt ?? now, stage, onboardingStartedAt: prospect.onboardingStartedAt ?? now },
+      data: {
+        convertedVendorId: vendorId,
+        convertedAt: prospect.convertedAt ?? now,
+        stage,
+        onboardingStartedAt: prospect.onboardingStartedAt ?? now,
+        // A linked prospect cannot be claimed again through an old URL.
+        registrationTokenHash: null,
+        registrationTokenExpiresAt: null,
+      },
     });
     await tx.acquisitionActivity.create({
       data: { prospectId, type: "SYSTEM_SYNC", outcome: "Vendor linked through registration or confirmed admin match", stageFrom: prospect.stage, stageTo: stage, createdByAdminId: actorId ?? null },
@@ -93,7 +113,7 @@ export async function syncProspectLifecycleForVendor(vendorId: string) {
     prisma.credit.findFirst({ where: { vendorId }, orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
     prisma.vendorSubscription.findUnique({ where: { vendorId }, select: { status: true, updatedAt: true } }),
   ]);
-  const target = firstCredit && subscription?.status === "ACTIVE" ? "WON" : firstCredit ? "ACTIVATED" : "ONBOARDING";
+  const target: AcquisitionStage = firstCredit && subscription?.status === "ACTIVE" ? "WON" : firstCredit ? "ACTIVATED" : "ONBOARDING";
   if (prospect.stage === target || (prospect.stage === "WON" && target !== "WON")) return prospect;
   const now = new Date();
   return prisma.$transaction(async (tx) => {
@@ -101,6 +121,7 @@ export async function syncProspectLifecycleForVendor(vendorId: string) {
       stage: target,
       ...((target === "ACTIVATED" || target === "WON") ? { activatedAt: prospect.activatedAt ?? firstCredit?.createdAt ?? now } : {}),
       ...(target === "WON" ? { wonAt: prospect.wonAt ?? subscription?.updatedAt ?? now } : {}),
+      ...(target === "WON" ? { nextActionType: null, nextActionAt: null, nextActionNote: null } : {}),
     };
     const updated = await tx.acquisitionProspect.update({ where: { id: prospect.id }, data });
     await tx.acquisitionActivity.create({

@@ -5,15 +5,15 @@ import { AcquisitionDetailClient } from "@/components/admin/acquisition-detail-c
 
 export const dynamic = "force-dynamic";
 export default async function AcquisitionDetailPage({ params }: { params: { id: string } }) {
-  const [prospect, session, vendors] = await Promise.all([
+  const [prospect, session, admins] = await Promise.all([
     prisma.acquisitionProspect.findUnique({ where: { id: params.id }, include: {
       community: true, campaign: true, ambassador: true, assignedTo: { select: { id: true, name: true } },
       convertedVendor: { include: { subscription: true, _count: { select: { credits: true } } } },
       activities: { include: { createdBy: { select: { name: true } } }, orderBy: { occurredAt: "desc" } },
     } }),
     Promise.resolve(getAdminSession()),
-    prisma.vendor.findMany({ select: { id: true, businessName: true, phone: true, email: true }, orderBy: { createdAt: "desc" }, take: 300 }),
+    prisma.adminUser.findMany({ where: { activatedAt: { not: null }, role: { in: ["SUPER_ADMIN", "MARKETING"] } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   if (!prospect) notFound();
-  return <AcquisitionDetailClient prospect={JSON.parse(JSON.stringify(prospect))} vendors={vendors} canWrite={session?.role === "SUPER_ADMIN" || session?.role === "MARKETING"} />;
+  return <AcquisitionDetailClient prospect={JSON.parse(JSON.stringify(prospect))} admins={admins} canWrite={session?.role === "SUPER_ADMIN" || session?.role === "MARKETING"} />;
 }

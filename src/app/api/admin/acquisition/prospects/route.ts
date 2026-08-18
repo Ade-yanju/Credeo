@@ -12,6 +12,11 @@ const stageValues = ["IDENTIFIED", "CONTACTED", "RESPONDED", "QUALIFIED", "DEMO_
 const priorityValues = ["LOW", "NORMAL", "HIGH"] as const;
 const actionValues = ["CALL", "WHATSAPP", "EMAIL", "MEETING", "DEMO", "VISIT", "RESEARCH", "OTHER"] as const;
 const vendorValues = ["PROVISION_SHOP", "FOOD_CANTEEN", "LAUNDRY", "PRINTING", "BARBING_SALON", "HAIR_SALON", "PHARMACY", "MINI_MART", "OTHER"] as const;
+const businessSizeValues = ["SOLO", "MICRO", "SMALL", "MEDIUM", "LARGE", "UNKNOWN"] as const;
+const transactionVolumeBandValues = ["VERY_LOW", "LOW", "MEDIUM", "HIGH", "VERY_HIGH", "UNKNOWN"] as const;
+const creditBehaviorValues = ["NONE", "PAPER_LEDGER", "SPREADSHEET", "WHATSAPP", "DIGITAL_TOOL", "UNKNOWN"] as const;
+const whatsAppUsageValues = ["ACTIVE_PERSONAL", "WHATSAPP_BUSINESS", "LIMITED", "NONE", "UNKNOWN"] as const;
+const fitValues = ["HIGH", "MEDIUM", "LOW", "UNQUALIFIED"] as const;
 
 const schema = z.object({
   businessName: z.string().trim().min(2).max(120),
@@ -23,11 +28,11 @@ const schema = z.object({
   locationText: z.string().trim().max(200).optional().nullable(),
   city: z.string().trim().max(80).optional().nullable(),
   state: z.string().trim().max(80).optional().nullable(),
-  businessSize: enumValues(["SOLO", "MICRO", "SMALL", "MEDIUM", "LARGE", "UNKNOWN"]).default("UNKNOWN"),
-  transactionVolumeBand: enumValues(["VERY_LOW", "LOW", "MEDIUM", "HIGH", "VERY_HIGH", "UNKNOWN"]).default("UNKNOWN"),
-  creditBehavior: enumValues(["NONE", "PAPER_LEDGER", "SPREADSHEET", "WHATSAPP", "DIGITAL_TOOL", "UNKNOWN"]).default("UNKNOWN"),
-  whatsAppUsage: enumValues(["ACTIVE_PERSONAL", "WHATSAPP_BUSINESS", "LIMITED", "NONE", "UNKNOWN"]).default("UNKNOWN"),
-  fit: enumValues(["HIGH", "MEDIUM", "LOW", "UNQUALIFIED"]).default("MEDIUM"),
+  businessSize: enumValues(businessSizeValues).default("UNKNOWN"),
+  transactionVolumeBand: enumValues(transactionVolumeBandValues).default("UNKNOWN"),
+  creditBehavior: enumValues(creditBehaviorValues).default("UNKNOWN"),
+  whatsAppUsage: enumValues(whatsAppUsageValues).default("UNKNOWN"),
+  fit: enumValues(fitValues).default("MEDIUM"),
   fitNotes: z.string().trim().max(2000).optional().nullable(),
   source: enumValues(sourceValues),
   sourceDetail: z.string().trim().max(300).optional().nullable(),
@@ -44,6 +49,20 @@ const schema = z.object({
 
 function canRead(role: string) { return (ACQUISITION_READERS as readonly string[]).includes(role); }
 function canWrite(role: string) { return (ACQUISITION_OPERATORS as readonly string[]).includes(role); }
+
+async function validateReferences(d: z.infer<typeof schema>) {
+  const [community, campaign, ambassador, owner] = await Promise.all([
+    d.communityId ? prisma.community.findUnique({ where: { id: d.communityId }, select: { id: true } }) : null,
+    d.campaignId ? prisma.acquisitionCampaign.findUnique({ where: { id: d.campaignId }, select: { id: true } }) : null,
+    d.ambassadorId ? prisma.ambassador.findUnique({ where: { id: d.ambassadorId }, select: { id: true, status: true } }) : null,
+    d.assignedToAdminId ? prisma.adminUser.findUnique({ where: { id: d.assignedToAdminId }, select: { id: true, activatedAt: true, role: true } }) : null,
+  ]);
+  if (d.communityId && !community) return "Community not found";
+  if (d.campaignId && !campaign) return "Campaign not found";
+  if (d.ambassadorId && (!ambassador || ambassador.status !== "ACTIVE")) return "Ambassador must be active";
+  if (d.assignedToAdminId && (!owner || !owner.activatedAt || !(ACQUISITION_OPERATORS as readonly string[]).includes(owner.role))) return "Owner must be an active acquisition operator";
+  return null;
+}
 
 export async function GET(req: NextRequest) {
   const session = getAdminSession();
@@ -67,8 +86,8 @@ export async function GET(req: NextRequest) {
       { phone: { contains: search, mode: "insensitive" as const } },
       { email: { contains: search, mode: "insensitive" as const } },
     ] } : {}),
-    ...(queue === "overdue" ? { stage: { in: ACTIVE_ACQUISITION_STAGES }, nextActionAt: { lt: now } } : {}),
-    ...(queue === "today" ? { stage: { in: ACTIVE_ACQUISITION_STAGES }, nextActionAt: { gte: now, lte: todayEnd } } : {}),
+    ...(queue === "overdue" ? { stage: { in: [...ACTIVE_ACQUISITION_STAGES] }, nextActionAt: { lt: now } } : {}),
+    ...(queue === "today" ? { stage: { in: [...ACTIVE_ACQUISITION_STAGES] }, nextActionAt: { gte: now, lte: todayEnd } } : {}),
     ...(queue === "qualified-no-action" ? { stage: "QUALIFIED" as const, nextActionAt: null } : {}),
     ...(queue === "onboarding" ? { stage: "ONBOARDING" as const } : {}),
   };
@@ -104,6 +123,8 @@ export async function POST(req: NextRequest) {
   if (d.source === "AMBASSADOR_REFERRAL" && !d.ambassadorId) {
     return NextResponse.json({ error: "Ambassador-sourced prospects must name the ambassador." }, { status: 400 });
   }
+  const referenceError = await validateReferences(d);
+  if (referenceError) return NextResponse.json({ error: referenceError }, { status: 400 });
   const [prospects, vendors] = await Promise.all([
     phone || email ? prisma.acquisitionProspect.findMany({ where: { OR: [
       ...(phone ? [{ phone }] : []), ...(email ? [{ email }] : []),
@@ -116,10 +137,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ duplicateWarning: true, prospects, vendors }, { status: 409 });
   }
   const now = new Date();
+  const { forceCreate: _forceCreate, ...prospectData } = d;
   const prospect = await prisma.acquisitionProspect.create({
     data: {
-      ...d,
-      forceCreate: undefined,
+      ...prospectData,
       phone, email,
       nextActionAt: d.nextActionAt ? new Date(d.nextActionAt) : null,
       capturedByAdminId: session.id === "__super__" ? null : session.id,

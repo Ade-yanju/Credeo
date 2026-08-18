@@ -23,6 +23,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const prospect = await prisma.acquisitionProspect.findUnique({ where: { id: params.id } });
   if (!prospect) return NextResponse.json({ error: "Prospect not found" }, { status: 404 });
   const d = parsed.data;
+  if ((prospect.stage === "LOST" || prospect.stage === "UNQUALIFIED" || prospect.stage === "WON") && d.nextActionType) {
+    return NextResponse.json({ error: "Closed prospects cannot receive a new follow-up action." }, { status: 400 });
+  }
   if ((d.nextActionType || d.nextActionAt || d.nextActionNote) && (!d.nextActionType || !d.nextActionAt || !d.nextActionNote)) {
     return NextResponse.json({ error: "A next action needs type, date/time, and note." }, { status: 400 });
   }
@@ -35,6 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     } });
     await tx.acquisitionProspect.update({ where: { id: params.id }, data: {
       ...(d.type === "CALL" || d.type === "WHATSAPP" || d.type === "EMAIL" ? { lastContactedAt: now, contactAttempts: { increment: 1 } } : {}),
+      ...(d.type === "FOLLOW_UP_COMPLETED" && !d.nextActionType ? { nextActionType: null, nextActionAt: null, nextActionNote: null } : {}),
       ...(d.nextActionType ? { nextActionType: d.nextActionType, nextActionAt: new Date(d.nextActionAt!), nextActionNote: d.nextActionNote } : {}),
     } });
     return created;

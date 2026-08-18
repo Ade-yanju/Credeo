@@ -32,6 +32,15 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   const d = parsed.data;
+  if (d.startAt && d.endAt && new Date(d.endAt) < new Date(d.startAt)) {
+    return NextResponse.json({ error: "Campaign end date must be after its start date." }, { status: 400 });
+  }
+  if (d.ownerAdminId) {
+    const owner = await prisma.adminUser.findUnique({ where: { id: d.ownerAdminId }, select: { activatedAt: true, role: true } });
+    if (!owner?.activatedAt || !(ACQUISITION_OPERATORS as readonly string[]).includes(owner.role)) {
+      return NextResponse.json({ error: "Owner must be an active acquisition operator." }, { status: 400 });
+    }
+  }
   const campaign = await prisma.acquisitionCampaign.create({ data: {
     ...d, startAt: d.startAt ? new Date(d.startAt) : null, endAt: d.endAt ? new Date(d.endAt) : null,
   } });
