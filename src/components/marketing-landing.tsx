@@ -34,7 +34,10 @@ import { WhatsAppChat } from "@/components/ui/whatsapp-chat";
 import { SiteNav } from "@/components/marketing/site-nav";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { useScrollSteps } from "@/hooks/use-scroll-steps";
-import { ADD_CONVERSATION, REMINDER_CONVERSATION } from "@/lib/whatsapp-demo-data";
+import {
+  ADD_CONVERSATION,
+  REMINDER_CONVERSATION,
+} from "@/lib/whatsapp-demo-data";
 
 /**
  * Marketing landing page.
@@ -67,7 +70,16 @@ const HERO_VISUAL_LABEL =
 function CardChip({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 34 26" className={className} aria-hidden>
-      <rect x="0.6" y="0.6" width="32.8" height="24.8" rx="4" fill="#D8C79B" stroke="#A78F5C" strokeWidth="1.2" />
+      <rect
+        x="0.6"
+        y="0.6"
+        width="32.8"
+        height="24.8"
+        rx="4"
+        fill="#D8C79B"
+        stroke="#A78F5C"
+        strokeWidth="1.2"
+      />
       <path
         d="M11 0.6v6.4H0.6M23 0.6v6.4h10.4M11 25.4v-6.4H0.6M23 25.4v-6.4h10.4M11 9.5h12v7H11z"
         fill="none"
@@ -136,12 +148,18 @@ function HeroCardFan() {
           />
           <div className="relative flex h-full flex-col justify-between">
             <div className="flex items-start justify-between">
-              <span className="font-serif text-[13px] leading-none text-black/70">VODIUM</span>
+              <span className="font-serif text-[13px] leading-none text-black/70">
+                VODIUM
+              </span>
               <Contactless className="h-4 w-4 text-black/50" />
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-[0.14em] text-black/50">Ledger</p>
-              <p className="tnum mt-1 text-[15px] font-semibold text-black/80">₦142,500</p>
+              <p className="text-[10px] uppercase tracking-[0.14em] text-black/50">
+                Ledger
+              </p>
+              <p className="tnum mt-1 text-[15px] font-semibold text-black/80">
+                ₦142,500
+              </p>
             </div>
           </div>
         </div>
@@ -178,7 +196,9 @@ function HeroCardFan() {
                 className="-mx-4 mb-3 h-5 bg-[linear-gradient(90deg,#C9A961,#8A6A2A_58%,#0A0A0A)]"
               />
               <div className="flex items-end justify-between">
-                <p className="tnum text-[11px] font-medium text-black/70">Vendor 1234</p>
+                <p className="tnum text-[11px] font-medium text-black/70">
+                  Vendor 1234
+                </p>
                 <p className="font-serif text-[11px] text-black/45">VODIUM</p>
               </div>
             </div>
@@ -194,7 +214,9 @@ function HeroCardFan() {
           <div className="relative flex h-full flex-col justify-between p-4">
             <CardChip className="h-[26px] w-[34px]" />
             <div>
-              <p className="tnum text-[11px] font-medium text-white/80">Vendor 1234</p>
+              <p className="tnum text-[11px] font-medium text-white/80">
+                Vendor 1234
+              </p>
               <p className="tnum text-[10px] text-white/45">02/28</p>
             </div>
           </div>
@@ -300,7 +322,11 @@ const TIERS = [
       "Web dashboard",
       "Up to 50 customers",
     ],
-    notIncluded: ["Cross-vendor credit scores", "Dashboard analytics", "CSV export"],
+    notIncluded: [
+      "Cross-vendor credit scores",
+      "Dashboard analytics",
+      "CSV export",
+    ],
     popular: false,
   },
   {
@@ -317,7 +343,11 @@ const TIERS = [
       "Up to 200 customers",
       "CSV export",
     ],
-    notIncluded: ["Unlimited customers", "Priority WhatsApp support", "API access (beta)"],
+    notIncluded: [
+      "Unlimited customers",
+      "Priority WhatsApp support",
+      "API access (beta)",
+    ],
     popular: true,
   },
   {
@@ -424,7 +454,7 @@ export default function LandingPage() {
                   href="/register"
                   className="inline-flex h-11 items-center gap-1.5 rounded-lg bg-vodium-black px-5 text-[13px] font-semibold text-vodium-cream shadow-[0_8px_20px_rgba(0,0,0,.18)] transition-colors hover:bg-vodium-charcoal"
                 >
-                  Start free trial <ChevronRight size={15} />
+                  Get Started <ChevronRight size={15} />
                 </Link>
                 <a
                   href="#how-it-works"
@@ -534,7 +564,10 @@ export default function LandingPage() {
           Stays on the black band. The gold panels are the loudest thing on the
           page and they need the dark ground to land — on white, a gold field
           carrying white mockups collapses into one pale mass. */}
-      <section id="features" className="scroll-mt-20 px-6 py-20 md:px-12 md:py-28">
+      <section
+        id="features"
+        className="scroll-mt-20 px-6 py-20 md:px-12 md:py-28"
+      >
         <motion.div {...anim} className="mx-auto max-w-6xl">
           <div className="mx-auto mb-12 max-w-xl text-center">
             <p className="eyebrow mb-4">Everything you need</p>
@@ -580,7 +613,10 @@ export default function LandingPage() {
       </section>
 
       {/* ── Pricing ────────────────────────────────────────────────── */}
-      <section id="pricing" className="scroll-mt-20 px-6 py-20 md:px-12 md:py-28">
+      <section
+        id="pricing"
+        className="scroll-mt-20 px-6 py-20 md:px-12 md:py-28"
+      >
         <motion.div {...anim} className="mx-auto max-w-6xl">
           <div className="mb-12 max-w-xl">
             <p className="eyebrow mb-4">Pricing</p>
@@ -609,7 +645,11 @@ export default function LandingPage() {
                 <div className="rounded-xl border border-[color:var(--hairline)] bg-[linear-gradient(180deg,var(--surface-2),var(--surface-1))] p-5">
                   <div className="flex min-h-[24px] items-center justify-between gap-2">
                     <p className="flex items-center gap-2 text-[13px] font-medium text-[color:var(--text-primary)]">
-                      <tier.icon size={15} className="text-[color:var(--text-tertiary)]" aria-hidden />
+                      <tier.icon
+                        size={15}
+                        className="text-[color:var(--text-tertiary)]"
+                        aria-hidden
+                      />
                       {tier.plan}
                     </p>
                     <span
@@ -627,7 +667,9 @@ export default function LandingPage() {
                     <span className="tnum text-[34px] font-semibold leading-none text-[color:var(--text-primary)]">
                       {tier.price}
                     </span>
-                    <span className="text-[13px] text-[color:var(--text-tertiary)]">/ month</span>
+                    <span className="text-[13px] text-[color:var(--text-tertiary)]">
+                      / month
+                    </span>
                   </p>
                   <p className="mt-2 text-[11px] text-[color:var(--text-quaternary)]">
                     {tier.sub}
@@ -672,9 +714,15 @@ export default function LandingPage() {
                   {tier.notIncluded.length > 0 && (
                     <>
                       <p className="my-6 flex items-center gap-3 text-[11px] text-[color:var(--text-quaternary)]">
-                        <span aria-hidden className="h-px flex-1 bg-[color:var(--hairline)]" />
+                        <span
+                          aria-hidden
+                          className="h-px flex-1 bg-[color:var(--hairline)]"
+                        />
                         Not in this plan
-                        <span aria-hidden className="h-px flex-1 bg-[color:var(--hairline)]" />
+                        <span
+                          aria-hidden
+                          className="h-px flex-1 bg-[color:var(--hairline)]"
+                        />
                       </p>
 
                       <ul className="space-y-3">
@@ -1033,7 +1081,9 @@ function PanelArt({ art }: { art: PanelArtKey }) {
             V
           </span>
           <div className="min-w-0">
-            <p className="text-[12px] font-semibold text-black">New credit logged</p>
+            <p className="text-[12px] font-semibold text-black">
+              New credit logged
+            </p>
             <p className="truncate text-[10px] text-black/50">
               Mama Taiwo&apos;s Provisions
             </p>
@@ -1055,7 +1105,11 @@ function PanelArt({ art }: { art: PanelArtKey }) {
     return (
       <div className="absolute inset-0 grid place-items-center">
         <div className="relative h-[168px] w-[220px]">
-          <svg viewBox="0 0 220 168" className="absolute inset-0 h-full w-full" aria-hidden>
+          <svg
+            viewBox="0 0 220 168"
+            className="absolute inset-0 h-full w-full"
+            aria-hidden
+          >
             {[
               [28, 40],
               [188, 28],
@@ -1105,7 +1159,9 @@ function PanelArt({ art }: { art: PanelArtKey }) {
           Payment reminder
         </p>
         <p className="tnum mt-2 text-[24px] leading-none text-black">₦12,000</p>
-        <p className="mt-2 text-[10px] text-black/45">Due tomorrow · Tunde F.</p>
+        <p className="mt-2 text-[10px] text-black/45">
+          Due tomorrow · Tunde F.
+        </p>
         <div className="mt-4 flex gap-2">
           <span className="rounded-md bg-black px-3 py-1.5 text-[10px] font-medium text-white">
             View balance
@@ -1129,7 +1185,9 @@ function PanelArt({ art }: { art: PanelArtKey }) {
             <Lock size={13} className="text-vodium-gold" aria-hidden />
           </span>
           <div className="min-w-0">
-            <p className="text-[12px] font-semibold text-black">Encrypted at rest</p>
+            <p className="text-[12px] font-semibold text-black">
+              Encrypted at rest
+            </p>
             <p className="truncate text-[10px] text-black/50">NDPR · Nigeria</p>
           </div>
         </div>
@@ -1187,9 +1245,15 @@ function PanelArt({ art }: { art: PanelArtKey }) {
             <p className="truncate text-[11px] font-semibold text-black">
               Mama Taiwo&apos;s book
             </p>
-            <Shield size={12} className="shrink-0 text-vodium-gold" aria-hidden />
+            <Shield
+              size={12}
+              className="shrink-0 text-vodium-gold"
+              aria-hidden
+            />
           </div>
-          <p className="tnum mt-2 text-[19px] leading-none text-black">₦142,500</p>
+          <p className="tnum mt-2 text-[19px] leading-none text-black">
+            ₦142,500
+          </p>
           <p className="mt-1.5 text-[9px] uppercase tracking-[0.08em] text-black/40">
             Only you can see this
           </p>
@@ -1294,8 +1358,16 @@ const DASH_OVERDUE = [
 ];
 
 const DASH_ACTIVITY = [
-  { icon: Receipt, title: "Credit #C1045 marked paid", when: "About 2 hours ago" },
-  { icon: UserPlus, title: "Chiamaka Obi added as customer", when: "This morning" },
+  {
+    icon: Receipt,
+    title: "Credit #C1045 marked paid",
+    when: "About 2 hours ago",
+  },
+  {
+    icon: UserPlus,
+    title: "Chiamaka Obi added as customer",
+    when: "This morning",
+  },
   { icon: FileText, title: "Weekly summary exported", when: "Yesterday" },
   { icon: Bell, title: "12 reminders delivered", when: "2 days ago" },
 ];
@@ -1317,7 +1389,9 @@ function DashPanel({
   return (
     <div className={`bg-[color:var(--surface-1)] p-4 md:p-5 ${className}`}>
       <div className="flex items-center gap-2">
-        <p className="text-[12px] font-medium text-[color:var(--text-primary)]">{title}</p>
+        <p className="text-[12px] font-medium text-[color:var(--text-primary)]">
+          {title}
+        </p>
         {badge && (
           <span className="tnum inline-flex items-center gap-1 rounded border border-[#3FB950]/25 bg-[#3FB950]/10 px-1.5 py-px text-[10px] text-[#56C963]">
             <TrendingUp size={10} aria-hidden />
@@ -1325,7 +1399,9 @@ function DashPanel({
           </span>
         )}
       </div>
-      <p className="mt-1 text-[11px] text-[color:var(--text-quaternary)]">{subtitle}</p>
+      <p className="mt-1 text-[11px] text-[color:var(--text-quaternary)]">
+        {subtitle}
+      </p>
       <div className="mt-4">{children}</div>
     </div>
   );
@@ -1409,8 +1485,13 @@ function DashboardMockup() {
           {/* KPI row */}
           <dl className="grid grid-cols-2 gap-px bg-[color:var(--hairline)] lg:grid-cols-4">
             {DASH_KPIS.map((kpi) => (
-              <div key={kpi.label} className="bg-[color:var(--surface-1)] p-4 md:p-5">
-                <dt className="text-[11px] text-[color:var(--text-tertiary)]">{kpi.label}</dt>
+              <div
+                key={kpi.label}
+                className="bg-[color:var(--surface-1)] p-4 md:p-5"
+              >
+                <dt className="text-[11px] text-[color:var(--text-tertiary)]">
+                  {kpi.label}
+                </dt>
                 <dd className="tnum mt-2 text-[20px] leading-none text-[color:var(--text-primary)] md:text-[24px]">
                   {kpi.value}
                 </dd>
@@ -1425,7 +1506,9 @@ function DashboardMockup() {
                     <TrendingDown size={11} aria-hidden />
                   )}
                   {kpi.delta}
-                  <span className="text-[color:var(--text-quaternary)]">vs last week</span>
+                  <span className="text-[color:var(--text-quaternary)]">
+                    vs last week
+                  </span>
                 </dd>
               </div>
             ))}
@@ -1493,8 +1576,19 @@ function DashboardMockup() {
                   />
                 </svg>
                 <div className="mt-1 flex justify-between">
-                  {["Apr 7", "Apr 8", "Apr 9", "Apr 10", "Apr 11", "Apr 12", "Apr 13"].map((d) => (
-                    <span key={d} className="text-[9px] text-[color:var(--text-quaternary)]">
+                  {[
+                    "Apr 7",
+                    "Apr 8",
+                    "Apr 9",
+                    "Apr 10",
+                    "Apr 11",
+                    "Apr 12",
+                    "Apr 13",
+                  ].map((d) => (
+                    <span
+                      key={d}
+                      className="text-[9px] text-[color:var(--text-quaternary)]"
+                    >
                       {d}
                     </span>
                   ))}
@@ -1505,13 +1599,22 @@ function DashboardMockup() {
 
           {/* Bottom row */}
           <div className="grid gap-px border-t border-[color:var(--hairline)] bg-[color:var(--hairline)] lg:grid-cols-3">
-            <DashPanel title="Overdue credits" subtitle="Open amounts and payment status.">
+            <DashPanel
+              title="Overdue credits"
+              subtitle="Open amounts and payment status."
+            >
               <table className="w-full">
                 <thead>
                   <tr className="text-[10px] text-[color:var(--text-quaternary)]">
-                    <th scope="col" className="pb-2 text-left font-normal">Customer</th>
-                    <th scope="col" className="pb-2 text-left font-normal">Credit</th>
-                    <th scope="col" className="pb-2 text-right font-normal">Amount</th>
+                    <th scope="col" className="pb-2 text-left font-normal">
+                      Customer
+                    </th>
+                    <th scope="col" className="pb-2 text-left font-normal">
+                      Credit
+                    </th>
+                    <th scope="col" className="pb-2 text-right font-normal">
+                      Amount
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1540,9 +1643,16 @@ function DashboardMockup() {
               </p>
             </DashPanel>
 
-            <DashPanel title="Reminder health" subtitle="Nothing urgent needs your attention.">
+            <DashPanel
+              title="Reminder health"
+              subtitle="Nothing urgent needs your attention."
+            >
               <div className="flex flex-col items-center py-4 text-center">
-                <CheckCircle2 size={22} className="text-[#56C963]" aria-hidden />
+                <CheckCircle2
+                  size={22}
+                  className="text-[#56C963]"
+                  aria-hidden
+                />
                 <p className="mt-3 text-[12px] text-[color:var(--text-primary)]">
                   You&rsquo;re all caught up.
                 </p>
@@ -1550,7 +1660,8 @@ function DashboardMockup() {
                   Every reminder due this week has been delivered.
                 </p>
                 <p className="mt-3 flex items-center gap-1 text-[11px] text-vodium-gold">
-                  Review scheduled reminders <ArrowRight size={11} aria-hidden />
+                  Review scheduled reminders{" "}
+                  <ArrowRight size={11} aria-hidden />
                 </p>
               </div>
             </DashPanel>
@@ -1560,7 +1671,11 @@ function DashboardMockup() {
                 {DASH_ACTIVITY.map((item) => (
                   <li key={item.title} className="flex items-start gap-2.5">
                     <span className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface-2)]">
-                      <item.icon size={11} className="text-[color:var(--text-tertiary)]" aria-hidden />
+                      <item.icon
+                        size={11}
+                        className="text-[color:var(--text-tertiary)]"
+                        aria-hidden
+                      />
                     </span>
                     <div className="min-w-0">
                       <p className="text-[11px] leading-snug text-[color:var(--text-primary)]">
@@ -1609,7 +1724,9 @@ function VendorVoices() {
               <span
                 aria-hidden
                 className={`pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap text-[12px] transition-opacity duration-200 ${
-                  isActive ? "text-[color:var(--text-tertiary)] opacity-100" : "opacity-0"
+                  isActive
+                    ? "text-[color:var(--text-tertiary)] opacity-100"
+                    : "opacity-0"
                 }`}
               >
                 {t.name}
@@ -1642,7 +1759,9 @@ function VendorVoices() {
           &ldquo;{current.quote}&rdquo;
         </blockquote>
         <figcaption className="mt-5 text-[13px] text-[color:var(--text-tertiary)]">
-          <span className="font-medium text-[color:var(--gold-ink)]">{current.name}</span>
+          <span className="font-medium text-[color:var(--gold-ink)]">
+            {current.name}
+          </span>
           <span className="mx-2 text-[color:var(--text-quaternary)]">·</span>
           {current.role}
         </figcaption>
