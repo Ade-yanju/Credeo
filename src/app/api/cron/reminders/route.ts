@@ -36,6 +36,7 @@ import { sendCustomerReminder } from "@/lib/whatsapp/reminder-delivery";
 import { markOverdueCredits, sendOverdueReminders, sendEscalations } from "@/lib/credit-lifecycle";
 import { createReminderPrefResolver } from "@/lib/reminder-prefs";
 import { markOverdueInvoices, sendOverdueInvoiceReminders } from "@/lib/invoice-lifecycle";
+import { isPlanActive } from "@/lib/plan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,7 +86,7 @@ export async function GET(req: NextRequest) {
     },
     include: {
       student: true,
-      vendor:  true,
+      vendor:  { include: { subscription: true } },
     },
   });
 
@@ -103,7 +104,7 @@ export async function GET(req: NextRequest) {
     const student  = credit.student;
     const vendor   = credit.vendor;
 
-    if (!(await remindersAllowed(vendor.organizationId, "preDue"))) {
+    if (!isPlanActive(vendor.subscription) || !(await remindersAllowed(vendor.organizationId, "preDue"))) {
       skipped++;
       continue;
     }

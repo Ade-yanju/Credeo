@@ -5,6 +5,7 @@ import { getOrgChannelCredentials, type ChannelCredentials } from "@/lib/whatsap
 import { createReminderPrefResolver } from "@/lib/reminder-prefs";
 import { messages, payToBlock } from "@/lib/whatsapp/messages";
 import { maskPhone } from "@/lib/customer-verify-token";
+import { isPlanActive } from "@/lib/plan";
 
 const DEFAULT_SCORE_DELTA = -80;
 const OVERDUE_REMINDER_INTERVAL_MS = 3 * 86_400_000;
@@ -179,7 +180,7 @@ export async function sendOverdueReminders(scope: LifecycleScope & { force?: boo
         whatsappBlockedAt: null,
       },
     },
-    include: { student: true, vendor: true },
+    include: { student: true, vendor: { include: { subscription: true } } },
     orderBy: { dueDate: "asc" },
   });
 
@@ -230,7 +231,7 @@ export async function sendOverdueReminders(scope: LifecycleScope & { force?: boo
   let skipped = 0;
 
   for (const item of grouped.values()) {
-    if (!scope.force && !(await remindersAllowed(item.vendor.organizationId, "overdue"))) {
+    if (!isPlanActive(item.vendor.subscription) || (!scope.force && !(await remindersAllowed(item.vendor.organizationId, "overdue")))) {
       skipped++;
       continue;
     }
@@ -334,7 +335,7 @@ export async function sendEscalations(scope: LifecycleScope = {}) {
       escalatedAt: null,
       student: { whatsappBlockedAt: null, NOT: { phone: { startsWith: "pending:" } } },
     },
-    include: { student: true, vendor: true },
+    include: { student: true, vendor: { include: { subscription: true } } },
     orderBy: { reminderSentAt: "asc" },
     take: 200, // bound each run so a backlog can't blow the CPU/quota budget
   });
@@ -348,7 +349,7 @@ export async function sendEscalations(scope: LifecycleScope = {}) {
   let skipped = 0;
 
   for (const credit of stale) {
-    if (!(await remindersAllowed(credit.vendor.organizationId, "preDue"))) {
+    if (!isPlanActive(credit.vendor.subscription) || !(await remindersAllowed(credit.vendor.organizationId, "preDue"))) {
       skipped++;
       continue;
     }

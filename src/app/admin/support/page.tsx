@@ -12,6 +12,9 @@ import {
   ExternalLink,
   RefreshCw,
   BellRing,
+  UserPlus,
+  Copy,
+  X,
 } from "lucide-react";
 
 interface VendorRow {
@@ -29,6 +32,7 @@ interface VendorRow {
   overdueCount: number;
   totalOwed: number;
 }
+interface ProspectRow { id: string; ownerName: string; businessName: string; phone: string; email: string; expiresAt: string; claimedAt: string | null; claimedVendorId: string | null; claimedVendorName: string | null; }
 
 const STATUS_COLOR: Record<string, string> = {
   ACTIVE: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
@@ -46,6 +50,7 @@ const SUB_LABELS: Record<string, string> = {
 
 export default function SupportPage() {
   const [vendors, setVendors] = useState<VendorRow[]>([]);
+  const [prospects, setProspects] = useState<ProspectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<
@@ -60,6 +65,7 @@ export default function SupportPage() {
 
   const [blasting, setBlasting] = useState(false);
   const [blastResult, setBlastResult] = useState<string | null>(null);
+  const [showProspectForm, setShowProspectForm] = useState(false);
 
   // Customer care's manual lever: re-send WhatsApp reminders to every overdue
   // customer right now, ignoring the 3-day repeat interval.
@@ -98,6 +104,8 @@ export default function SupportPage() {
         setVendors(data.vendors);
         setStats(data.stats);
       }
+      const prospectRes = await fetch("/api/admin/support/prospects");
+      if (prospectRes.ok) setProspects((await prospectRes.json()).prospects);
     } finally {
       setLoading(false);
     }
@@ -148,6 +156,12 @@ export default function SupportPage() {
         </div>
         <div className="flex items-center gap-3 mt-1">
           <button
+            onClick={() => setShowProspectForm(true)}
+            className="flex items-center gap-2 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-xs font-semibold px-3 py-2 hover:bg-emerald-500/25 transition"
+          >
+            <UserPlus size={13} /> <span className="hidden sm:inline">Create vendor invite</span>
+          </button>
+          <button
             onClick={blastReminders}
             disabled={blasting}
             className="flex items-center gap-2 rounded-lg bg-vodium-gold/15 border border-vodium-gold/30 text-vodium-gold text-xs font-semibold px-3 py-2 hover:bg-vodium-gold/25 transition disabled:opacity-50"
@@ -170,6 +184,10 @@ export default function SupportPage() {
           {blastResult}
         </div>
       )}
+
+      {showProspectForm && <ProspectForm onClose={() => { setShowProspectForm(false); loadVendors(); }} />}
+
+      {prospects.length > 0 && <div className="rounded-2xl border border-white/[0.06] bg-vodium-charcoal overflow-hidden"><div className="px-5 py-3 border-b border-white/[0.06]"><h2 className="font-serif text-lg text-vodium-cream">Prospect onboarding</h2><p className="text-xs text-vodium-cream/40 mt-0.5">Customer-care claim links and completed accounts.</p></div><div className="divide-y divide-white/[0.04]">{prospects.map((p) => { const expired = !p.claimedAt && new Date(p.expiresAt) < new Date(); return <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"><div><p className="text-sm text-vodium-cream">{p.businessName} <span className="text-vodium-cream/40">· {p.ownerName}</span></p><p className="text-xs text-vodium-cream/40">{p.phone} · {p.email}</p></div>{p.claimedAt ? <div className="text-right"><p className="text-xs font-semibold text-emerald-300">Onboarded</p><a href={p.claimedVendorId ? `/admin/vendors/${p.claimedVendorId}` : undefined} className="text-xs text-vodium-gold hover:underline">{p.claimedVendorName ?? "View vendor"}</a></div> : <p className={`text-xs font-semibold ${expired ? "text-rose-300" : "text-amber-300"}`}>{expired ? "Claim link expired" : "Pending claim"}</p>}</div>; })}</div></div>}
 
       {/* Stats strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -397,4 +415,30 @@ export default function SupportPage() {
       </div>
     </div>
   );
+}
+
+function ProspectForm({ onClose }: { onClose: () => void }) {
+  const [form, setForm] = useState({ ownerName: "", businessName: "", phone: "", email: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [claimUrl, setClaimUrl] = useState<string | null>(null);
+  const update = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }));
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setLoading(true); setError(null);
+    try {
+      const res = await fetch("/api/admin/support/prospects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const data = await res.json(); if (!res.ok) throw new Error(data.error ?? "Could not create invite.");
+      setClaimUrl(data.prospect.claimUrl);
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not create invite."); } finally { setLoading(false); }
+  }
+  return <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.04] p-5 space-y-4">
+    <div className="flex items-start justify-between gap-4"><div><h2 className="font-serif text-lg text-vodium-cream">Invite a prospective vendor</h2><p className="text-xs text-vodium-cream/45 mt-1">They claim the link, choose a password, and finish onboarding. Their trial starts only after claiming.</p></div><button onClick={onClose} className="text-vodium-cream/35 hover:text-vodium-cream"><X size={16} /></button></div>
+    {claimUrl ? <div className="space-y-3"><p className="text-sm text-emerald-300">Invite created. Send this one-time link; it expires in 7 days.</p><div className="flex gap-2"><input readOnly value={claimUrl} className="min-w-0 flex-1 rounded-lg bg-black/30 border border-white/[0.1] px-3 py-2 text-xs text-vodium-cream" /><button type="button" onClick={() => navigator.clipboard.writeText(claimUrl)} className="rounded-lg border border-emerald-400/30 px-3 text-emerald-300 hover:bg-emerald-400/10"><Copy size={14} /></button></div><button onClick={onClose} className="text-xs text-vodium-cream/55 hover:text-vodium-cream">Done</button></div> : <form onSubmit={submit} className="grid md:grid-cols-2 gap-3">
+      <input required value={form.ownerName} onChange={(e) => update("ownerName", e.target.value)} placeholder="Owner's full name" className="rounded-lg bg-black/30 border border-white/[0.1] px-3 py-2.5 text-sm text-vodium-cream" />
+      <input required value={form.businessName} onChange={(e) => update("businessName", e.target.value)} placeholder="Business name" className="rounded-lg bg-black/30 border border-white/[0.1] px-3 py-2.5 text-sm text-vodium-cream" />
+      <input required value={form.phone} onChange={(e) => update("phone", e.target.value)} placeholder="WhatsApp phone (+234...)" className="rounded-lg bg-black/30 border border-white/[0.1] px-3 py-2.5 text-sm text-vodium-cream" />
+      <input required type="email" value={form.email} onChange={(e) => update("email", e.target.value)} placeholder="Email address" className="rounded-lg bg-black/30 border border-white/[0.1] px-3 py-2.5 text-sm text-vodium-cream" />
+      {error && <p className="md:col-span-2 text-xs text-rose-300">{error}</p>}<div className="md:col-span-2 flex justify-end"><button disabled={loading} className="rounded-lg bg-emerald-400 px-4 py-2 text-xs font-bold text-black disabled:opacity-50">{loading ? "Creating…" : "Create claim link"}</button></div>
+    </form>}
+  </div>;
 }

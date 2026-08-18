@@ -283,9 +283,11 @@ export async function sendWhatsAppTemplate(
   }
 
   const recipient = to.replace(/^\+/, "").replace(/^whatsapp:/, "");
-  const components: unknown[] = [
-    { type: "body", parameters: bodyParams.map((t) => ({ type: "text", text: t })) },
-  ];
+  // A static template has no body variables and must not include an empty BODY
+  // component in the Graph request. Variable templates keep their parameters.
+  const components: unknown[] = bodyParams.length
+    ? [{ type: "body", parameters: bodyParams.map((t) => ({ type: "text", text: t })) }]
+    : [];
   // Authentication templates carry a copy-code / one-tap button that repeats the code.
   if (opts?.otpButton) {
     components.push({ type: "button", sub_type: "url", index: 0, parameters: [{ type: "text", text: bodyParams[0] }] });

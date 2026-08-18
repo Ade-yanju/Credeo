@@ -10,6 +10,7 @@ import { markOverdueCredits } from "@/lib/credit-lifecycle";
 import crypto from "crypto";
 import { vendorKnowsCustomer, maskPhone } from "@/lib/customer-verify";
 import { sendOtpCode } from "@/lib/otp-delivery";
+import { sendCreditLoggedNotification } from "@/lib/whatsapp/credit-notification-delivery";
 import { setOtpCookie, verifyOtpCookie, clearOtpCookie } from "@/lib/otp-cookie";
 import type { CreditStatus } from "@prisma/client";
 import { syncProspectLifecycleForVendor } from "@/lib/acquisition";
@@ -290,4 +291,16 @@ export async function POST(req: NextRequest) {
   );
 
   return NextResponse.json({ ok: true, credit }, { status: 201 });
+  const customerNotification = await sendCreditLoggedNotification({
+    organizationId: vendor.organizationId,
+    phone: credit.student.phone,
+    customerName: credit.student.fullName,
+    shopName: vendor.businessName,
+    amount,
+    description: credit.description,
+    loggedAt: credit.createdAt,
+    dueDate: credit.dueDate,
+  });
+
+  return NextResponse.json({ ok: true, credit, customerNotification }, { status: 201 });
 }
