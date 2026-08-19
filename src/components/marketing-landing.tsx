@@ -134,7 +134,7 @@ function HeroCardFan() {
         <div className="absolute left-0 top-[112px] h-[228px] w-[150px] -rotate-[14deg] rounded-2xl bg-[#EFEDE5] p-4 shadow-[0_18px_40px_rgba(0,0,0,.28)]">
           <div className="flex h-full flex-col justify-between">
             <p className="[writing-mode:vertical-rl] rotate-180 text-[11px] font-medium tracking-wide text-black/45">
-              Prepaid · ₦660,388 balance
+              Durojaiye Blessing Akpan
             </p>
             <CardChip className="h-[26px] w-[34px]" />
           </div>
@@ -155,11 +155,9 @@ function HeroCardFan() {
             </div>
             <div>
               <p className="text-[10px] uppercase tracking-[0.14em] text-black/50">
-                Ledger
+                Tobechukwu Oluwatobi
               </p>
-              <p className="tnum mt-1 text-[15px] font-semibold text-black/80">
-                ₦142,500
-              </p>
+              <p className="tnum mt-1 text-[15px] font-semibold text-black/80"></p>
             </div>
           </div>
         </div>
@@ -188,7 +186,7 @@ function HeroCardFan() {
               <Contactless className="h-4 w-3 text-black/35" />
             </div>
             <p className="tnum text-[13px] tracking-[0.08em] text-black/55">
-              •••• •••• 1234
+              •••• •••• 4123
             </p>
             <div>
               <div
@@ -196,9 +194,7 @@ function HeroCardFan() {
                 className="-mx-4 mb-3 h-5 bg-[linear-gradient(90deg,#C9A961,#8A6A2A_58%,#0A0A0A)]"
               />
               <div className="flex items-end justify-between">
-                <p className="tnum text-[11px] font-medium text-black/70">
-                  Vendor 1234
-                </p>
+                <p className="tnum text-[11px] font-medium text-black/70"></p>
                 <p className="font-serif text-[11px] text-black/45">VODIUM</p>
               </div>
             </div>
@@ -214,9 +210,7 @@ function HeroCardFan() {
           <div className="relative flex h-full flex-col justify-between p-4">
             <CardChip className="h-[26px] w-[34px]" />
             <div>
-              <p className="tnum text-[11px] font-medium text-white/80">
-                Vendor 1234
-              </p>
+              <p className="tnum text-[11px] font-medium text-white/80"></p>
               <p className="tnum text-[10px] text-white/45">02/28</p>
             </div>
           </div>
@@ -232,7 +226,7 @@ const STEPS = [
     icon: MessageCircle,
     meta: "About 15 seconds",
     title: "Record credit on WhatsApp",
-    body: "Send ADD to your Vodium number. We guide you through it — name, amount, due date. Done in 15 seconds, with no app to download.",
+    body: "Send ADD to your Vodium number. We guide you through it name, amount, due date. Done in 15 seconds, with no app to download.",
   },
   {
     n: "02",
@@ -298,7 +292,7 @@ const TRUST_PANELS = [
   },
   {
     title: "Works on any phone",
-    body: "No app to download and no storage to spare — if WhatsApp runs, Vodium runs.",
+    body: "No app to download and no storage to spare if WhatsApp runs, Vodium runs.",
     art: "anyphone",
   },
 ] as const;
@@ -445,7 +439,7 @@ export default function LandingPage() {
               </h1>
 
               <p className="mt-5 max-w-sm text-[14px] leading-relaxed text-[color:var(--text-secondary)]">
-                Credit tracking for vendors that just works — record a credit on
+                Credit tracking for vendors that just works record a credit on
                 WhatsApp, and Vodium chases it for you.
               </p>
 
@@ -528,7 +522,7 @@ export default function LandingPage() {
               </h2>
               <p className="mt-4 text-[15px] leading-relaxed text-[color:var(--text-secondary)]">
                 Nothing to download and nothing to learn. You already know how
-                to send a message — that is the whole product.
+                to send a message that is the whole product.
               </p>
             </div>
 
@@ -575,7 +569,7 @@ export default function LandingPage() {
               Built for the vendor. Nothing extra.
             </h2>
             <p className="mt-4 text-[15px] leading-relaxed text-[color:var(--text-secondary)]">
-              Everything you need to record, track and recover vendor credit —
+              Everything you need to record, track and recover vendor credit
               securely, and from the phone already in your hand.
             </p>
           </div>
@@ -772,7 +766,7 @@ export default function LandingPage() {
             href="/register"
             className="mt-9 inline-flex h-12 items-center gap-2 rounded-lg bg-vodium-black px-8 text-[14px] font-semibold text-vodium-cream shadow-[0_10px_30px_rgba(10,10,10,.24)] transition-[background-color,transform] duration-100 hover:bg-vodium-charcoal active:scale-[0.99]"
           >
-            Sign your shop up — it&rsquo;s free <ArrowRight size={16} />
+            Get Started <ArrowRight size={16} />
           </Link>
         </motion.div>
       </section>
