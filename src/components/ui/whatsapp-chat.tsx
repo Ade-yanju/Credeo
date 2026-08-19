@@ -68,7 +68,14 @@ export function WhatsAppChat({
         className="flex items-center gap-3 px-4 py-3"
         style={{ background: WA.header }}
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-vodium-gold/40 bg-[color:var(--surface-1)]">
+        {/* Avatar fill is WA.shell, not `--surface-1`. This mockup keeps
+            WhatsApp's palette on purpose, so it must not read Vodium band
+            tokens: on a light band `--surface-1` resolves to near-white and the
+            avatar became a white blob with an unreadable gold V on it. */}
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-vodium-gold/40"
+          style={{ background: WA.shell }}
+        >
           <span className="font-serif text-base leading-none text-vodium-gold">
             V
           </span>
