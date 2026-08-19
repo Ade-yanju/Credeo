@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { normalisePhone } from "@/lib/utils";
 import { hasOrgAdminAccess, requireTenantContext } from "@/lib/tenant-context";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 import { ipFromRequest, writeAudit } from "@/lib/audit";
 import { sendStaffInviteEmail } from "@/lib/email/staff-invite";
 
@@ -48,6 +49,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const ctx = await requireTenantContext();
+  const denied = entitlementDenied(ctx.vendor.subscription, "tenant.write");
+  if (denied) return denied;
   if (!hasOrgAdminAccess(ctx)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

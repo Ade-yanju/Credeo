@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSessionPhone } from "@/lib/session";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 import type { CreditStatus, RepaymentMethod, ScoreEventType } from "@prisma/client";
 
 // GET /api/credits/[id]
@@ -33,7 +34,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const phone = getSessionPhone();
   if (!phone) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const vendor = await prisma.vendor.findUnique({ where: { phone } });
+  // Subscription comes along because entitlement here depends on the PAYLOAD,
+  // not the route: this one endpoint both records money received and writes
+  // credit off. See the action decision after parsing below.
+  const vendor = await prisma.vendor.findUnique({
+    where: { phone },
+    include: { subscription: true },
+  });
   if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
 
   const credit = await prisma.credit.findFirst({
@@ -48,6 +55,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   const { repaymentAmount, repaymentMethod, status, notes } = parsed.data;
+
+  // One endpoint, two very different actions. Recording money a customer paid
+  // survives a lapsed trial; writing credit off is a credit decision and does
+  // not (see ALLOWED_WHEN_LOCKED in lib/entitlement.ts).
+  const denied = entitlementDenied(
+    vendor.subscription,
+    status && !repaymentAmount ? "credit.update" : "repayment.create"
+  );
+  if (denied) return denied;
 
   // Handle write-off or manual status change (no repayment)
   if (status && !repaymentAmount) {

@@ -79,6 +79,15 @@ const FONT_DIR = path.join(process.cwd(), "src", "lib", "fonts");
 /** Registration is global and must happen exactly once per process. */
 let fontsRegistered = false;
 
+/**
+ * Exported so other PDFs (lib/weekly-report-pdf.ts) reuse the SAME registration
+ * instead of re-registering the same families — and so they inherit the ₦ font
+ * rule documented at the top of this file rather than rediscovering it.
+ */
+export function registerPdfFonts(): void {
+  registerFonts();
+}
+
 function registerFonts(): void {
   if (fontsRegistered) return;
   Font.register({

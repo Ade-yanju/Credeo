@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { hasTenantWriteAccess, requireTenantContext } from "@/lib/tenant-context";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 import { roundMoney } from "@/lib/bnpl";
 import { ipFromRequest, writeAudit } from "@/lib/audit";
 
@@ -16,6 +17,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!hasTenantWriteAccess(ctx) || !ctx.organizationId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  // Logging a payment received against an invoice is the same event as a
+  // repayment, so it stays allowed after the trial lapses. The call is kept
+  // rather than omitted so the policy table stays the single source of truth —
+  // flip it there and this route obeys without being touched.
+  const denied = entitlementDenied(ctx.vendor.subscription, "invoice.payment");
+  if (denied) return denied;
 
   const invoice = await prisma.invoice.findFirst({
     where: { id: params.id, organizationId: ctx.organizationId },

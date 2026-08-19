@@ -103,6 +103,9 @@ export default function RegisterPage() {
   const [done, setDone] = useState(false);
   const [phoneCountry, setPhoneCountry] = useState<PhoneCountry>("NG");
   const [countryOpen, setCountryOpen] = useState(false);
+  const [acquisitionToken] = useState(() =>
+    typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("acq") ?? ""
+  );
   const [form, setForm] = useState<FormData>({
     businessName: "",
     vendorType: "",
@@ -195,6 +198,7 @@ export default function RegisterPage() {
     phone: fullPhone(),
     email: form.email.trim().toLowerCase(),
     password: form.password,
+    ...(acquisitionToken ? { acquisitionToken } : {}),
   });
 
   async function handleRequestOtp() {

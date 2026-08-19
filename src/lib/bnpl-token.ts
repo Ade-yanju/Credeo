@@ -91,3 +91,41 @@ export function verifyInvoiceToken(token: string): string | null {
     return null;
   }
 }
+
+/**
+ * Signed public link for a vendor's weekly PDF report.
+ *
+ * Unlike the tokens above this carries TWO values — the vendor and the week —
+ * because a report is not a stored row: it is rendered on demand from whatever
+ * the ledger says for that week. The pair is joined by "|", a character cuid()
+ * never produces, so the split is unambiguous.
+ *
+ * This link must be publicly fetchable because Meta's servers download the
+ * document when we send it as a WhatsApp template header — the vendor's own
+ * session is not involved.
+ */
+export function signReportToken(vendorId: string, weekStart: Date): string {
+  const raw = `${vendorId}|${weekStart.toISOString().slice(0, 10)}`;
+  const payload = Buffer.from(raw, "utf8").toString("base64url");
+  return `${payload}.${hmac(`v1:report:${payload}`)}`;
+}
+
+export function verifyReportToken(token: string): { vendorId: string; weekStart: Date } | null {
+  try {
+    const dot = token.lastIndexOf(".");
+    if (dot === -1) return null;
+    const payload = token.slice(0, dot);
+    const incoming = token.slice(dot + 1);
+    if (!safeEqual(incoming, hmac(`v1:report:${payload}`))) return null;
+
+    const [vendorId, day] = Buffer.from(payload, "base64url").toString("utf8").split("|");
+    if (!vendorId || vendorId.length < 10 || !day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+
+    const weekStart = new Date(`${day}T00:00:00.000Z`);
+    if (Number.isNaN(weekStart.getTime())) return null;
+
+    return { vendorId, weekStart };
+  } catch {
+    return null;
+  }
+}

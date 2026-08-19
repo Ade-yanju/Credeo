@@ -18,6 +18,8 @@ export const ADMIN_ROUTE_ROLES: Array<{ prefix: string; roles: string[] }> = [
   { prefix: "/admin/disputes",  roles: ["SUPER_ADMIN", "CUSTOMER_CARE"] },
   { prefix: "/api/admin/disputes", roles: ["SUPER_ADMIN", "CUSTOMER_CARE"] },
   { prefix: "/admin/marketing", roles: ["SUPER_ADMIN", "MARKETING"] },
+  { prefix: "/admin/acquisition", roles: ["SUPER_ADMIN", "MARKETING", "ANALYTICS", "CFO"] },
+  { prefix: "/api/admin/acquisition", roles: ["SUPER_ADMIN", "MARKETING", "ANALYTICS", "CFO"] },
   { prefix: "/api/admin/ambassadors", roles: ["SUPER_ADMIN", "MARKETING"] },
   { prefix: "/api/admin/whatsapp-profile", roles: ["SUPER_ADMIN"] },
   { prefix: "/admin/organizations", roles: ["SUPER_ADMIN"] },

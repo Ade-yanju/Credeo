@@ -538,6 +538,32 @@ export const messages = {
     `📖 I can't read photos right now. Please add customers with *ADD* for the moment — ` +
     `for example *ADD Chidi 08012345678 2500 7d*.`,
 
+  // ── SUBSCRIPTION & TRIAL ───────────────────────────────────────────────
+  // Escalating, never shaming. The vendor is told exactly what still works and
+  // exactly when it stops, so nothing about the lockout arrives as a surprise.
+  trialEndedGraceStart: (daysLeft: number) =>
+    `Your free trial ended today.\n\n` +
+    `Nothing has changed yet — you still have *${daysLeft} days* of full access. ` +
+    `After that you'll still see all your records and can still record money customers pay you, ` +
+    `but adding new credit, invoices and reminders will pause.\n\n` +
+    `Reply *UPGRADE* to keep everything running.`,
+
+  trialEndedGraceMidway: (daysLeft: number) =>
+    `Quick reminder: *${daysLeft} day${daysLeft === 1 ? "" : "s"} left* before your account goes read-only.\n\n` +
+    `Your book is safe either way. Renewing keeps you adding credit and sending reminders.\n\n` +
+    `Reply *UPGRADE* to renew.`,
+
+  trialEndedGraceFinal: () =>
+    `Last day of full access.\n\n` +
+    `From tomorrow you'll still be able to open your dashboard and record repayments, ` +
+    `but adding new credit, invoices and reminders will pause until you renew.\n\n` +
+    `Reply *UPGRADE* to stay switched on.`,
+
+  accountLocked: () =>
+    `Your free trial has ended. Your records are safe and you can still view them ` +
+    `and record money customers pay you, but adding credits, invoices, imports and ` +
+    `reminders are paused until you renew.`,
+
   // ── HELP & misc ────────────────────────────────────────────────────────
   help: () =>
     `*Vodium Ledger commands:*\n\n` +

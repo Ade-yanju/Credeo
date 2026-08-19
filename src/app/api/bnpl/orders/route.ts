@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { calculateCouponDiscount, calculateItemsTotal, getOrCreateCustomerForVendor, nextOrderNumber } from "@/lib/bnpl";
 import { canAccessBranch, hasTenantWriteAccess, requireTenantContext } from "@/lib/tenant-context";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 import { ipFromRequest, writeAudit } from "@/lib/audit";
 
 const itemSchema = z.object({
@@ -52,6 +53,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const ctx = await requireTenantContext();
+  const denied = entitlementDenied(ctx.vendor.subscription, "bnpl.order.create");
+  if (denied) return denied;
   if (!hasTenantWriteAccess(ctx)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getSessionPhone } from "@/lib/session";
+import { guardVendorWrite } from "@/lib/entitlement-guard";
 import { markOverdueCredits, sendOverdueReminders } from "@/lib/credit-lifecycle";
 
 // POST /api/vendor/remind-overdue
 // Vendor-triggered: sends a WhatsApp reminder to every student with an OVERDUE credit.
 export async function POST() {
-  const phone = getSessionPhone();
-  if (!phone) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const vendor = await prisma.vendor.findUnique({ where: { phone } });
-  if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
+  // sendOverdueReminders() already skips each item for a lapsed vendor
+  // (credit-lifecycle.ts:234 checks isPlanActive regardless of `force`), so
+  // this used to answer 200 with sent:0 — technically safe, but it looked
+  // broken rather than gated. Guarding here turns that into an honest 403
+  // with a renew prompt, and skips the markOverdueCredits writes we would
+  // otherwise do for a vendor who cannot send anything.
+  const guard = await guardVendorWrite("reminder.send");
+  if (!guard.ok) return guard.response;
+  const { vendor } = guard;
 
   await markOverdueCredits({ vendorId: vendor.id });
   const result = await sendOverdueReminders({ vendorId: vendor.id, force: true });

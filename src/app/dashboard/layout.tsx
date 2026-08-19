@@ -11,6 +11,8 @@ import {
 import { NpsWidget } from "@/components/ui/nps-widget";
 import { NavProgress } from "@/components/ui/nav-progress";
 import { NotificationBell } from "@/components/ui/notification-bell";
+import { getEntitlement } from "@/lib/entitlement";
+import type { SubscriptionStatus as SubscriptionStatusLike } from "@prisma/client";
 
 type VendorInfo = {
   businessName: string;
@@ -19,10 +21,11 @@ type VendorInfo = {
   community: { shortName: string | null; name: string } | null;
   organization: { name: string; type: string; status: string; trialEndsAt: string | null; logoUrl: string | null; brandColor: string | null } | null;
   branch: { name: string; code: string } | null;
-  subscription: { 
-    plan: string; 
+  subscription: {
+    plan: string;
     status: string;
     trialEndsAt: string | null;
+    graceEndsAt: string | null;
   } | null;
 };
 
@@ -103,8 +106,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const planColor    = PLAN_COLORS[plan] ?? PLAN_COLORS.STARTER;
   const sub          = vendor?.subscription;
   const trialEndsAt  = sub?.trialEndsAt ? new Date(sub.trialEndsAt) : null;
-  const isTrial      = sub?.status === "TRIAL" || !sub;
-  const isExpired    = sub?.status === "EXPIRED" || (isTrial && trialEndsAt && trialEndsAt < new Date());
+
+  // Derived from the same authority the API enforces, so the banner can never
+  // disagree with what a write actually does (lib/entitlement.ts). The vendor
+  // payload arrives as JSON, hence the date revival.
+  const entitlement  = getEntitlement(
+    sub
+      ? {
+          status: sub.status as SubscriptionStatusLike,
+          trialEndsAt,
+          graceEndsAt: sub.graceEndsAt ? new Date(sub.graceEndsAt) : null,
+          currentPeriodEnd: null,
+        }
+      : null
+  );
+  // While the vendor payload is still loading, `sub` is undefined and the
+  // fail-closed default would flash a false "read-only" banner. Suppress the
+  // lapsed states until we actually know.
+  const known        = Boolean(vendor);
+  const isTrial      = entitlement.state === "TRIAL";
+  const inGrace      = known && entitlement.state === "GRACE";
+  const isLocked     = known && entitlement.state === "LOCKED";
   const daysLeft     = trialEndsAt ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / 86_400_000)) : null;
 
   const currentTitle =
@@ -228,14 +250,36 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="px-3 pb-4 pt-2 space-y-2">
           <div className="h-px bg-white/[0.05] mb-3" />
 
-          {/* Subscription banner */}
-          {isExpired ? (
+          {/* Subscription banner — three states, escalating.
+              LOCKED says what still works, not just what stopped: a vendor who
+              thinks their book is gone will not come back to renew. */}
+          {isLocked ? (
             <div className="flex items-start gap-2.5 rounded-xl bg-rose-500/[0.05] border border-rose-500/20 px-3 py-2.5 mb-2 shadow-[0_2px_10px_rgba(244,63,94,0.05)]">
               <X size={13} className="text-rose-400 flex-shrink-0 mt-0.5" />
               <div className="min-w-0">
-                <p className="text-[11px] font-bold text-rose-400 leading-tight">Trial expired</p>
-                <Link href="/dashboard/upgrade" className="text-[10px] text-rose-400/60 hover:text-rose-400 transition-colors mt-0.5 block font-medium underline underline-offset-2">
+                <p className="text-[11px] font-bold text-rose-400 leading-tight">Read-only</p>
+                <p className="text-[10px] text-rose-400/60 mt-0.5 leading-snug">
+                  You can still view your book and record repayments.
+                </p>
+                <Link href="/dashboard/upgrade" className="text-[10px] text-rose-400/60 hover:text-rose-400 transition-colors mt-1 block font-medium underline underline-offset-2">
                   Renew subscription →
+                </Link>
+              </div>
+            </div>
+          ) : inGrace ? (
+            <div className="flex items-start gap-2.5 rounded-xl bg-amber-500/[0.05] border border-amber-500/20 px-3 py-2.5 mb-2">
+              <Zap size={13} className="text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold text-amber-400 leading-tight">
+                  {entitlement.daysUntilLockout === 0
+                    ? "Last day of full access"
+                    : `${entitlement.daysUntilLockout} day${entitlement.daysUntilLockout === 1 ? "" : "s"} of full access left`}
+                </p>
+                <p className="text-[10px] text-amber-400/60 mt-0.5 leading-snug">
+                  Your trial ended. Renew to keep adding credit.
+                </p>
+                <Link href="/dashboard/upgrade" className="text-[10px] text-amber-400/60 hover:text-amber-400 transition-colors mt-1 block font-medium underline underline-offset-2">
+                  Renew now →
                 </Link>
               </div>
             </div>
@@ -368,14 +412,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </span>
             {/* Notification bell */}
             <NotificationBell />
-            {/* Add credit */}
-            <Link
-              href="/dashboard/credit/new"
-              className="btn-gold px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 h-8"
-            >
-              <Plus size={13} />
-              <span className="hidden sm:inline">Add credit</span>
-            </Link>
+            {/* Add credit — becomes a renew prompt when locked, so the main CTA
+                teaches instead of dead-ending in a 403. */}
+            {isLocked ? (
+              <Link
+                href="/dashboard/upgrade?blocked=credit"
+                title="Adding credit is paused until you renew"
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 h-8 bg-white/[0.04] border border-white/[0.08] text-vodium-cream/40 hover:text-vodium-cream/70 transition-colors"
+              >
+                <Zap size={13} />
+                <span className="hidden sm:inline">Renew to add</span>
+              </Link>
+            ) : (
+              <Link
+                href="/dashboard/credit/new"
+                className="btn-gold px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 h-8"
+              >
+                <Plus size={13} />
+                <span className="hidden sm:inline">Add credit</span>
+              </Link>
+            )}
           </div>
         </header>
 

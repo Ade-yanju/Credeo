@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canAccessBranch, hasTenantWriteAccess, requireTenantContext } from "@/lib/tenant-context";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 import { getOrCreateCustomerForVendor, roundMoney } from "@/lib/bnpl";
 import { ipFromRequest, writeAudit } from "@/lib/audit";
 
@@ -48,6 +49,10 @@ export async function POST(req: NextRequest) {
   if (!hasTenantWriteAccess(ctx) || !ctx.organizationId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  // requireTenantContext already loaded the subscription via getVendorSession,
+  // so this costs no extra query.
+  const denied = entitlementDenied(ctx.vendor.subscription, "invoice.create");
+  if (denied) return denied;
 
   const json = await req.json();
   const parsed = createSchema.safeParse(json);

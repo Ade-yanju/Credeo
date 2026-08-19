@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getSessionPhone } from "@/lib/session";
 import { rateLimit } from "@/lib/redis";
 import { normalisePhoneNG } from "@/lib/utils";
-import { getStudentLimit, isPlanActive } from "@/lib/plan";
+import { getStudentLimit } from "@/lib/plan";
+import { guardVendorWrite } from "@/lib/entitlement-guard";
 import { nextVendorCustomerId } from "@/lib/customer-id";
 import { markOverdueCredits } from "@/lib/credit-lifecycle";
 import crypto from "crypto";
@@ -13,6 +14,7 @@ import { sendOtpCode } from "@/lib/otp-delivery";
 import { sendCreditLoggedNotification } from "@/lib/whatsapp/credit-notification-delivery";
 import { setOtpCookie, verifyOtpCookie, clearOtpCookie } from "@/lib/otp-cookie";
 import type { CreditStatus } from "@prisma/client";
+import { syncProspectLifecycleForVendor } from "@/lib/acquisition";
 
 const VERIFY_PURPOSE = "credit-verify";
 
@@ -76,31 +78,18 @@ const createSchema = z.object({
 
 // POST /api/credits
 export async function POST(req: NextRequest) {
-  const phone = getSessionPhone();
-  if (!phone) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  // IP-based rate limit: 60 credits per hour per IP (prevents automated abuse)
+  // Rate limit BEFORE any DB work: 60 credits per hour per IP.
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
   const { ok: rlOk } = await rateLimit(`rl:credits:${ip}`, 60, 3600);
   if (!rlOk) {
     return NextResponse.json({ error: "Too many requests. Please slow down." }, { status: 429 });
   }
 
-  const vendor = await prisma.vendor.findUnique({
-    where: { phone },
-    include: { subscription: true },
-  });
-  if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
-
-  // ── Subscription status check ────────────────────────────────────────────
-  const sub = vendor.subscription;
-
-  if (!isPlanActive(sub)) {
-    return NextResponse.json(
-      { error: "Your subscription has expired. Please renew to continue adding credits." },
-      { status: 403 }
-    );
-  }
+  // Session, vendor lookup and entitlement in one step. Extending NEW credit
+  // is a paid action, so this is blocked once the grace window closes.
+  const guard = await guardVendorWrite("credit.create");
+  if (!guard.ok) return guard.response;
+  const { vendor } = guard;
 
   const json = await req.json();
   const parsed = createSchema.safeParse(json);
@@ -282,6 +271,12 @@ export async function POST(req: NextRequest) {
       scoreDelta: 0,
     },
   });
+
+  // If this vendor originated from acquisition, their first real ledger entry
+  // is the product-defined activation event.
+  void syncProspectLifecycleForVendor(vendor.id).catch((err) =>
+    console.error("[credits] acquisition lifecycle sync failed:", err)
+  );
 
   const customerNotification = await sendCreditLoggedNotification({
     organizationId: vendor.organizationId,

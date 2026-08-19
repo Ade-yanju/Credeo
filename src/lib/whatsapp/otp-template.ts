@@ -429,3 +429,100 @@ export async function ensureInvoiceTemplate(input: {
   }
   return { name: input.name, status: json.status ?? "PENDING", created: true };
 }
+
+/**
+ * Provision the weekly-report template (DOCUMENT header + 5 body params).
+ *
+ * Mirrors ensureInvoiceTemplate above, including its header-handle rules: Meta
+ * needs a resumable-upload handle for a sample PDF, not a media ID or a URL.
+ * Reuses WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE — any PDF sample satisfies
+ * Meta for a DOCUMENT header, so there is no reason to make an operator upload
+ * and manage a second one.
+ */
+export async function ensureWeeklyReportTemplate(input: {
+  name: string;
+}): Promise<{ name: string; status?: string; created: boolean; detail?: string }> {
+  const { token, phoneId } = creds();
+  if (!token || !phoneId) {
+    return { name: input.name, created: false, detail: "No WhatsApp credentials configured (dev)." };
+  }
+
+  const current = await listOtpTemplates();
+  if (current.detail && !current.templates.length) {
+    return { name: input.name, created: false, detail: current.detail };
+  }
+  const existing = current.templates.find((t) => sameTemplateName(t.name, input.name));
+  if (existing) return { name: input.name, status: existing.status, created: false };
+
+  const waba = await getWabaId(token, phoneId);
+  if ("error" in waba) return { name: input.name, created: false, detail: waba.error };
+
+  const headerHandle = process.env.WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE;
+  if (!headerHandle) {
+    return {
+      name: input.name,
+      created: false,
+      detail: invoiceTemplateVisibilityDetail(current.templates, input.name),
+    };
+  }
+  if (!looksLikeResumableUploadHandle(headerHandle)) {
+    return {
+      name: input.name,
+      created: false,
+      detail:
+        "WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE is not a valid Meta resumable-upload handle. " +
+        "Upload a sample PDF through Meta's Resumable Upload API and paste the returned `h` value.",
+    };
+  }
+
+  const reportRes = await fetch(`${GRAPH}/${waba.id}/message_templates`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: input.name,
+      language: "en_US",
+      category: "UTILITY",
+      components: [
+        {
+          type: "HEADER",
+          format: "DOCUMENT",
+          example: { header_handle: [headerHandle] },
+        },
+        {
+          type: "BODY",
+          text:
+            "Hi {{1}}, here is your Vodium Ledger report for {{2}}. " +
+            "You gave out {{3}} in credit and received {{4}}. {{5}} is still owing. " +
+            "The full report is attached.",
+          example: {
+            body_text: [[
+              "Nkechi",
+              "11 – 17 Aug 2026",
+              "₦48,500",
+              "₦31,200",
+              "₦96,750",
+            ]],
+          },
+        },
+      ],
+    }),
+  });
+  const reportJson = (await reportRes.json().catch(() => ({}))) as {
+    id?: string; status?: string;
+    error?: { code?: number; message?: string; error_user_msg?: string; error_subcode?: number };
+  };
+  if (!reportRes.ok) {
+    console.error("[weekly-report-template] create failed:", reportRes.status, JSON.stringify(reportJson.error ?? reportJson));
+    return {
+      name: input.name,
+      created: false,
+      detail:
+        reportJson.error?.error_subcode === 2494102
+          ? "Meta rejected WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE. Use the `h` value from the Resumable Upload API for a PDF sample."
+          : reportJson.error?.error_subcode === 2388185
+            ? "Meta requires Business Verification before templates can be created — complete it in Security Center first."
+            : reportJson.error?.error_user_msg ?? explainMetaError(reportRes.status, reportJson.error),
+    };
+  }
+  return { name: input.name, status: reportJson.status ?? "PENDING", created: true };
+}

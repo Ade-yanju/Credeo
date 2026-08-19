@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canAccessBranch, canApproveCredit, requireTenantContext } from "@/lib/tenant-context";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 import { ipFromRequest, writeAudit } from "@/lib/audit";
 import { signOrderToken } from "@/lib/bnpl-token";
 import { getOrgChannelCredentials } from "@/lib/whatsapp/channel-token";
@@ -17,6 +18,8 @@ const schema = z.object({
 // into an active BNPL credit with a repayment schedule.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await requireTenantContext();
+  const denied = entitlementDenied(ctx.vendor.subscription, "bnpl.order.decide");
+  if (denied) return denied;
   if (!canApproveCredit(ctx)) {
     return NextResponse.json({ error: "Only a manager, finance or owner can approve credit." }, { status: 403 });
   }

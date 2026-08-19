@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { resolveTenantByHost } from "@/lib/tenant-domain";
+import { getOrganizationEntitlement } from "@/lib/entitlement-guard";
+import { permits } from "@/lib/entitlement";
 import { normalisePhone } from "@/lib/utils";
 import { rateLimit } from "@/lib/redis";
 import { verifyOtpCookie, clearOtpCookie } from "@/lib/otp-cookie";
@@ -30,6 +32,19 @@ export async function POST(req: NextRequest) {
   const org = await resolveTenantByHost(req.headers.get("host"));
   if (!org || org.type === "SOLO_VENDOR") {
     return NextResponse.json({ error: "Store not found." }, { status: 404 });
+  }
+
+  // A store whose subscription has lapsed cannot approve orders
+  // (bnpl.order.decide is blocked), so accepting a request here would leave
+  // the shopper waiting on something that can never happen. Copy is
+  // deliberately NEUTRAL — a customer must never learn about the vendor's
+  // billing state.
+  const storeEntitlement = await getOrganizationEntitlement(org.id);
+  if (!storeEntitlement || !permits(storeEntitlement, "storefront.order.create")) {
+    return NextResponse.json(
+      { error: "This store isn't accepting new pay-later orders at the moment. Please contact the store directly." },
+      { status: 403 }
+    );
   }
 
   const json = await req.json().catch(() => ({}));

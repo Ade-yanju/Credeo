@@ -25,6 +25,7 @@ model Community {
   vendors  Vendor[]
   students Student[]
   organizations Organization[]
+  acquisitionProspects AcquisitionProspect[]
 }
 
 // ─────────────────────────────────────────────
@@ -241,6 +242,7 @@ model Vendor {
 
   credits       Credit[]
   subscription  VendorSubscription?
+  subscriptionEvents SubscriptionEvent[]
   scoreEvents   CreditScoreEvent[]
   notifications Notification[]
   memberships   OrganizationMembership[]
@@ -249,6 +251,7 @@ model Vendor {
   invoices      Invoice[]
   disputes      Dispute[]
   paymentReceipts PaymentReceipt[]
+  acquisitionProspect AcquisitionProspect?
 
   @@index([communityId])
   @@index([organizationId])
@@ -789,6 +792,11 @@ model VendorSubscription {
   plan            SubscriptionPlan
   status          SubscriptionStatus @default(TRIAL)
   trialEndsAt     DateTime?
+  // When the read-only lockout actually bites. Stamped at the moment the
+  // subscription lapses rather than derived from trialEndsAt + N days, so
+  // changing the grace length later never retroactively rewrites who was
+  // locked out when. Null = never lapsed.
+  graceEndsAt     DateTime?
   currentPeriodStart DateTime?
   currentPeriodEnd   DateTime?
   paystackCustomerId    String?
@@ -796,6 +804,39 @@ model VendorSubscription {
   monthlyAmount   Decimal  @db.Decimal(12, 2)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  events          SubscriptionEvent[]
+}
+
+/// Append-only history of every subscription state change.
+///
+/// A VendorSubscription row stores only its CURRENT status, so before this
+/// table existed nothing recorded WHEN a trial ended — finance analytics used
+/// `updatedAt` as a churn timestamp, which any later write to the row silently
+/// moved. Every status mutation now writes one row here via
+/// recordSubscriptionEvent() in src/lib/subscription-events.ts, which makes
+/// trial-end dates, churn timing and a true MRR series reconstructable.
+model SubscriptionEvent {
+  id             String              @id @default(cuid())
+  vendorId       String
+  vendor         Vendor              @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  subscriptionId String?
+  subscription   VendorSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  fromStatus     SubscriptionStatus?
+  toStatus       SubscriptionStatus
+  plan           SubscriptionPlan
+  // Snapshotted so a later plan change cannot rewrite historical revenue.
+  monthlyAmount  Decimal             @db.Decimal(12, 2)
+  // Machine-readable cause, e.g. "trial_started", "trial_expired",
+  // "paystack_charge_success". Also used to make grace nudges send-once.
+  reason         String
+  occurredAt     DateTime            @default(now())
+
+  @@index([vendorId, occurredAt])
+  @@index([toStatus, occurredAt])
+  @@index([reason, occurredAt])
+  @@index([occurredAt])
 }
 
 enum SubscriptionPlan {
@@ -955,6 +996,7 @@ model Ambassador {
   updatedAt   DateTime         @updatedAt
 
   vendors     Vendor[]
+  acquisitionProspects AcquisitionProspect[]
 
   @@index([status])
   @@index([code])
@@ -974,11 +1016,236 @@ model AdminUser {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  capturedProspects     AcquisitionProspect[] @relation("ProspectCapturedBy")
+  assignedProspects     AcquisitionProspect[] @relation("ProspectAssignedTo")
+  acquisitionActivities AcquisitionActivity[]
+  acquisitionCampaigns  AcquisitionCampaign[] @relation("CampaignOwner")
+
   @@index([email])
   @@index([inviteToken])
 }
 
 // ─────────────────────────────────────────────
+// MERCHANT ACQUISITION
+// A prospect is deliberately separate from Vendor. It can only become a Vendor
+// through the normal registration flow or an explicit admin match.
+model AcquisitionProspect {
+  id                  String                            @id @default(cuid())
+  businessName        String
+  contactName         String?
+  phone               String?
+  email               String?
+  vendorType          VendorType?
+  communityId         String?
+  community           Community?                        @relation(fields: [communityId], references: [id], onDelete: SetNull)
+  locationText        String?
+  city                String?
+  state               String?
+  businessSize        AcquisitionBusinessSize           @default(UNKNOWN)
+  transactionVolumeBand AcquisitionTransactionVolumeBand @default(UNKNOWN)
+  creditBehavior      AcquisitionCreditBehavior         @default(UNKNOWN)
+  whatsAppUsage       AcquisitionWhatsAppUsage          @default(UNKNOWN)
+  fit                 AcquisitionFit                    @default(MEDIUM)
+  fitNotes            String?
+
+  source              AcquisitionSource
+  sourceDetail        String?
+  campaignId          String?
+  campaign            AcquisitionCampaign?              @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  ambassadorId        String?
+  ambassador          Ambassador?                        @relation(fields: [ambassadorId], references: [id], onDelete: SetNull)
+  capturedByAdminId   String?
+  capturedBy          AdminUser?                         @relation("ProspectCapturedBy", fields: [capturedByAdminId], references: [id], onDelete: SetNull)
+  assignedToAdminId   String?
+  assignedTo          AdminUser?                         @relation("ProspectAssignedTo", fields: [assignedToAdminId], references: [id], onDelete: SetNull)
+
+  stage               AcquisitionStage                  @default(IDENTIFIED)
+  priority            AcquisitionPriority               @default(NORMAL)
+  nextActionType      AcquisitionNextActionType?
+  nextActionAt        DateTime?
+  nextActionNote      String?
+  lastContactedAt     DateTime?
+  contactAttempts     Int                               @default(0)
+  lossReason          String?
+  unqualifiedReason   String?
+
+  convertedVendorId   String?                           @unique
+  convertedVendor     Vendor?                           @relation(fields: [convertedVendorId], references: [id], onDelete: SetNull)
+  convertedAt         DateTime?
+  registrationTokenHash String?                         @unique
+  registrationTokenExpiresAt DateTime?
+  identifiedAt        DateTime                          @default(now())
+  contactedAt         DateTime?
+  respondedAt         DateTime?
+  qualifiedAt         DateTime?
+  demoScheduledAt     DateTime?
+  demoCompletedAt     DateTime?
+  onboardingStartedAt DateTime?
+  activatedAt         DateTime?
+  wonAt               DateTime?
+  lostAt              DateTime?
+  createdAt           DateTime                          @default(now())
+  updatedAt           DateTime                          @updatedAt
+
+  activities          AcquisitionActivity[]
+
+  @@index([stage])
+  @@index([assignedToAdminId, nextActionAt])
+  @@index([source])
+  @@index([campaignId])
+  @@index([ambassadorId])
+  @@index([communityId])
+  @@index([phone])
+  @@index([email])
+  @@index([createdAt])
+}
+
+enum AcquisitionSource {
+  GOOGLE_BUSINESS
+  SOCIAL_MEDIA
+  AMBASSADOR_REFERRAL
+  DIRECT_OUTBOUND
+  EVENT_COMMUNITY
+  PARTNERSHIP
+  MANUAL_ENTRY
+  OTHER
+}
+
+enum AcquisitionBusinessSize {
+  SOLO
+  MICRO
+  SMALL
+  MEDIUM
+  LARGE
+  UNKNOWN
+}
+
+enum AcquisitionTransactionVolumeBand {
+  VERY_LOW
+  LOW
+  MEDIUM
+  HIGH
+  VERY_HIGH
+  UNKNOWN
+}
+
+enum AcquisitionCreditBehavior {
+  NONE
+  PAPER_LEDGER
+  SPREADSHEET
+  WHATSAPP
+  DIGITAL_TOOL
+  UNKNOWN
+}
+
+enum AcquisitionWhatsAppUsage {
+  ACTIVE_PERSONAL
+  WHATSAPP_BUSINESS
+  LIMITED
+  NONE
+  UNKNOWN
+}
+
+enum AcquisitionFit {
+  HIGH
+  MEDIUM
+  LOW
+  UNQUALIFIED
+}
+
+enum AcquisitionStage {
+  IDENTIFIED
+  CONTACTED
+  RESPONDED
+  QUALIFIED
+  DEMO_SCHEDULED
+  DEMO_COMPLETED
+  ONBOARDING
+  ACTIVATED
+  WON
+  LOST
+  UNQUALIFIED
+}
+
+enum AcquisitionPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+enum AcquisitionNextActionType {
+  CALL
+  WHATSAPP
+  EMAIL
+  MEETING
+  DEMO
+  VISIT
+  RESEARCH
+  OTHER
+}
+
+model AcquisitionActivity {
+  id                String                  @id @default(cuid())
+  prospectId        String
+  prospect          AcquisitionProspect     @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  type              AcquisitionActivityType
+  outcome           String?
+  body              String?
+  stageFrom         AcquisitionStage?
+  stageTo           AcquisitionStage?
+  nextActionAt      DateTime?
+  occurredAt        DateTime                @default(now())
+  createdByAdminId  String?
+  createdBy         AdminUser?              @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  createdAt         DateTime                @default(now())
+
+  @@index([prospectId, occurredAt])
+  @@index([createdByAdminId])
+  @@index([type])
+}
+
+enum AcquisitionActivityType {
+  NOTE
+  CALL
+  WHATSAPP
+  EMAIL
+  MEETING
+  DEMO
+  STATUS_CHANGE
+  FOLLOW_UP_COMPLETED
+  SYSTEM_SYNC
+}
+
+model AcquisitionCampaign {
+  id                String                    @id @default(cuid())
+  name              String
+  source            AcquisitionSource
+  status            AcquisitionCampaignStatus @default(DRAFT)
+  startAt           DateTime?
+  endAt             DateTime?
+  ownerAdminId      String?
+  owner             AdminUser?                @relation("CampaignOwner", fields: [ownerAdminId], references: [id], onDelete: SetNull)
+  budgetAmount      Decimal?                  @db.Decimal(12, 2)
+  actualSpendAmount Decimal?                  @db.Decimal(12, 2)
+  notes             String?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  prospects         AcquisitionProspect[]
+
+  @@index([status])
+  @@index([source])
+  @@index([ownerAdminId])
+  @@index([startAt])
+}
+
+enum AcquisitionCampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
 // AUDIT LOG
 // ─────────────────────────────────────────────
 

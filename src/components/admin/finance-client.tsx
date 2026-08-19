@@ -75,11 +75,20 @@ function RevenueTab({ data }: { data: FinanceData }) {
 
         <div className="grid lg:grid-cols-2 gap-4">
           <ChartCard
-            title="New MRR by start month"
-            sub="Vendors still paying, grouped by when they started — with the running total"
+            title="MRR over time"
+            sub={
+              data.mrrSeries.some((m) => m.reconstructed)
+                ? "Who was actually paying at each month end · early months reconstructed from backfilled history"
+                : "Who was actually paying at each month end"
+            }
             table={{
-              head: ["Month", "New MRR", "Running total", "Vendors"],
-              rows: data.mrrSeries.map((m) => [m.month, formatNaira(m.newMrr), formatNaira(m.cumulative), m.started]),
+              head: ["Month", "MRR", "Net change", "Paying vendors"],
+              rows: data.mrrSeries.map((m) => [
+                m.reconstructed ? `${m.month} *` : m.month,
+                formatNaira(m.mrr),
+                `${m.netChange >= 0 ? "+" : "−"}${formatNaira(Math.abs(m.netChange))}`,
+                m.payingVendors,
+              ]),
             }}
           >
             <TrendArea
@@ -87,8 +96,8 @@ function RevenueTab({ data }: { data: FinanceData }) {
               xKey="month"
               fmt={naira}
               series={[
-                { key: "cumulative", name: "Running total", color: SERIES.blue },
-                { key: "newMrr",     name: "New MRR",       color: SERIES.gold },
+                { key: "mrr",       name: "MRR",        color: SERIES.blue },
+                { key: "netChange", name: "Net change", color: SERIES.gold },
               ]}
             />
           </ChartCard>
@@ -183,6 +192,73 @@ function RiskTab({ data }: { data: FinanceData }) {
                 t.businessName, t.ownerName, t.phone ?? "—", t.plan,
                 t.daysLeft === null ? "—" : `${t.daysLeft}d`, formatNaira(t.monthlyAmount),
               ])}
+            />
+          )}
+        </ChartCard>
+      </section>
+
+      <section>
+        <SectionHeading
+          title="Trials that have already ended"
+          sub="Who lapsed, when, and what is still on their book"
+        />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <StatTile
+            label="In grace"
+            value={String(k.inGraceCount)}
+            sub="Still full access — call these first"
+            tone={k.inGraceCount === 0 ? "neutral" : "warning"}
+          />
+          <StatTile
+            label="Locked out"
+            value={String(k.lockedOutCount)}
+            sub="Read-only until they renew"
+            tone={k.lockedOutCount === 0 ? "good" : "critical"}
+          />
+          <StatTile
+            label="MRR stopped"
+            value={formatNaira(k.mrrLostToExpiry)}
+            sub="Recurring revenue actually lost"
+            tone={k.mrrLostToExpiry === 0 ? "good" : "critical"}
+          />
+          <StatTile
+            label="Avg days to convert"
+            value={k.avgDaysToConvert === null ? "—" : `${k.avgDaysToConvert}d`}
+            sub={k.avgDaysToConvert === null ? "No conversions recorded yet" : "Trial start → first payment"}
+          />
+        </div>
+
+        <ChartCard
+          title="Lapsed accounts"
+          sub={
+            data.lapsedVendors.length === 0
+              ? "Nothing lapsed"
+              : `${data.lapsedVendors.length} account${data.lapsedVendors.length === 1 ? "" : "s"} — grace first, then longest expired`
+          }
+        >
+          {data.lapsedVendors.length === 0 ? (
+            <p className="py-8 text-center text-sm text-vodium-cream/25">No lapsed accounts. Everyone is current.</p>
+          ) : (
+            <DataTable
+              head={["Vendor", "Owner", "Phone", "State", "Ended", "Days", "MRR", "Owed to them"]}
+              rows={[...data.lapsedVendors]
+                // Grace before locked (still saveable), then longest-lapsed first.
+                .sort((a, b) => {
+                  if (a.state !== b.state) return a.state === "GRACE" ? -1 : 1;
+                  return (b.daysExpired ?? 0) - (a.daysExpired ?? 0);
+                })
+                .map((v) => [
+                  v.businessName,
+                  v.ownerName,
+                  v.phone ?? "—",
+                  v.state === "GRACE"
+                    ? `Grace · ${v.daysUntilLockout ?? 0}d left`
+                    : "Locked",
+                  v.lapsedAt ? new Date(v.lapsedAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "—",
+                  v.daysExpired === null ? "—" : `${v.daysExpired}d`,
+                  formatNaira(v.monthlyAmount),
+                  `${formatNaira(v.outstanding)} (${v.creditCount})`,
+                ])}
             />
           )}
         </ChartCard>

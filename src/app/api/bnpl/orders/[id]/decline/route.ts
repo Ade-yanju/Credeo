@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { canApproveCredit, requireTenantContext } from "@/lib/tenant-context";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 import { ipFromRequest, writeAudit } from "@/lib/audit";
 import { getOrgChannelCredentials } from "@/lib/whatsapp/channel-token";
 import { sendWhatsAppMessage } from "@/lib/whatsapp/outbound";
@@ -8,6 +9,8 @@ import { sendWhatsAppMessage } from "@/lib/whatsapp/outbound";
 // POST /api/bnpl/orders/[id]/decline — reject a customer-submitted DRAFT order.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await requireTenantContext();
+  const denied = entitlementDenied(ctx.vendor.subscription, "bnpl.order.decide");
+  if (denied) return denied;
   if (!canApproveCredit(ctx)) {
     return NextResponse.json({ error: "Only a manager, finance or owner can act on this." }, { status: 403 });
   }

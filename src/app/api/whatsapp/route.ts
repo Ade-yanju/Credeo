@@ -43,7 +43,7 @@ import {
 import { rescueUnknownMessage } from "../../../lib/whatsapp/ai-fallback";
 import { getOrgChannelCredentials } from "../../../lib/whatsapp/channel-token";
 import { sendCreditLoggedNotification } from "../../../lib/whatsapp/credit-notification-delivery";
-import { isPlanActive } from "../../../lib/plan";
+import { getEntitlement } from "../../../lib/entitlement";
 import { contactPhoneFrom } from "../../../lib/whatsapp/contact";
 import { parseCommunity } from "../../../lib/community";
 import { createSoloOrganizationForVendor, trialEndsAt } from "../../../lib/tenant";
@@ -378,21 +378,48 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Expired accounts retain their dashboard data, but their WhatsApp bot is
-    // read-only. Stop an in-progress ADD/INVOICE/import flow too, otherwise a
-    // vendor could begin before expiry and finish the paid action afterward.
+    // Lapsed accounts keep their data, their reads, and their ability to record
+    // money a customer actually paid — the same rule the API enforces (see
+    // ALLOWED_WHEN_LOCKED in lib/entitlement.ts). Everything that extends new
+    // credit or sends outbound messages pauses. In-progress paid flows are
+    // still reset, so a vendor cannot begin before expiry and finish after.
+    //
+    // GRACE is deliberately NOT blocked: getEntitlement keeps canWrite true for
+    // 7 days after the trial ends, so the bot stays fully usable while the
+    // vendor is being nudged to renew.
     const subscription = await prisma.vendorSubscription.findUnique({ where: { vendorId: vendor.id } });
-    if (!isPlanActive(subscription)) {
-      const allowed = ["HELP", "MENU", "COMMANDS", "DASHBOARD", "WEB", "PORTAL", "SUPPORT", "AGENT", "HUMAN"];
+    const entitlement = getEntitlement(subscription);
+    if (!entitlement.canWrite) {
       const command = messageText.trim().toUpperCase();
-      if (!allowed.includes(command)) {
+      const firstWord = command.split(/\s+/)[0] ?? "";
+
+      const READ_ONLY = [
+        "HELP", "MENU", "COMMANDS", "DASHBOARD", "WEB", "PORTAL",
+        "SUPPORT", "AGENT", "HUMAN", "LIST", "SCORE", "UPGRADE", "RENEW", "CANCEL",
+      ];
+
+      // The repayment flow has four entry shapes — "PAID", "PAID Chidi", the
+      // customer name typed while MARKING_PAID, and the confirm/dispute
+      // buttons. All of them must pass, or the vendor gets let in and then cut
+      // off mid-conversation, which is worse than a clean refusal.
+      const isRepayment =
+        firstWord === "PAID" ||
+        session.state === "MARKING_PAID" ||
+        /^(CONFIRM_PAID|NOT_PAID)_/i.test(messageText.trim());
+
+      const isRead =
+        READ_ONLY.includes(command) ||
+        READ_ONLY.includes(firstWord) ||
+        session.state === "LOOKING_UP_SCORE";
+
+      if (!isRepayment && !isRead) {
         await prisma.whatsAppSession.update({
           where: { phone: fromPhone },
           data: { state: "IDLE", context: {} },
         });
         await sendWhatsAppButtons(
           fromPhone,
-          "Your free trial has ended. Your records are safe and you can still view them on the dashboard, but adding credits, invoices, imports, reminders and other bot actions are paused until you renew.",
+          messages.accountLocked(),
           [{ id: "DASHBOARD", title: "Open dashboard" }, { id: "SUPPORT", title: "Get support" }],
           creds,
         );

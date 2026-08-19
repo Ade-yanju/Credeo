@@ -50,7 +50,14 @@ export type AuditAction =
   // coupons
   | "coupon.created"
   // payments
-  | "payment_mandate.created";
+  | "payment_mandate.created"
+  // merchant acquisition
+  | "acquisition.prospect_created"
+  | "acquisition.prospect_updated"
+  | "acquisition.activity_created"
+  | "acquisition.campaign_created"
+  | "acquisition.campaign_updated"
+  | "acquisition.vendor_linked";
 
 export interface AuditInput {
   actorType: AuditActorType;

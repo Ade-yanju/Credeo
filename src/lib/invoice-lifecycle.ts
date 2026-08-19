@@ -57,7 +57,7 @@ export async function sendOverdueInvoiceReminders(scope: Scope = {}) {
         select: {
           id: true,
           name: true,
-          vendors: { select: { subscription: { select: { status: true, trialEndsAt: true, currentPeriodEnd: true } } } },
+          vendors: { select: { subscription: { select: { status: true, trialEndsAt: true, graceEndsAt: true, currentPeriodEnd: true } } } },
         },
       },
     },

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canAccessBranch, hasTenantWriteAccess, requireTenantContext } from "@/lib/tenant-context";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 import { ipFromRequest, writeAudit } from "@/lib/audit";
 import type { ScoreEventType } from "@prisma/client";
 
@@ -14,6 +15,8 @@ const schema = z.object({
 // POST /api/bnpl/orders/[id]/repayments — record a manual repayment against a BNPL order.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await requireTenantContext();
+  const denied = entitlementDenied(ctx.vendor.subscription, "bnpl.repayment.create");
+  if (denied) return denied;
   if (!hasTenantWriteAccess(ctx)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
