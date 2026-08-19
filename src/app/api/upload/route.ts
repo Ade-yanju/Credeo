@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionPhone } from "@/lib/session";
+import { guardVendorWrite } from "@/lib/entitlement-guard";
 
 export const runtime = "nodejs";
 
@@ -9,8 +9,11 @@ const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 // POST /api/upload — accepts an image file and stores it on Cloudinary (primary)
 // or ImgBB (fallback), returning the hosted URL. Keeps provider keys server-side.
 export async function POST(req: NextRequest) {
-  const phone = getSessionPhone();
-  if (!phone) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Uploads exist to feed products and shop branding, both of which are gated,
+  // so a locked account has nothing legitimate to upload — and keeping the
+  // door open would let lapsed accounts use our image hosting indefinitely.
+  const guard = await guardVendorWrite("upload.write");
+  if (!guard.ok) return guard.response;
 
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");

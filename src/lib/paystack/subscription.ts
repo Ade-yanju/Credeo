@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { recordSubscriptionEvent } from "@/lib/subscription-events";
 import type { SubscriptionPlan } from "@prisma/client";
 
 export const PLAN_AMOUNTS_KOBO: Record<SubscriptionPlan, number> = {
@@ -56,6 +57,12 @@ export async function activateSubscriptionFromPaystackData(
   const paystackCustomerId = data.customer?.id?.toString();
   const paystackSubscriptionCode = data.subscription?.subscription_code ?? data.subscription_code;
 
+  // Captured before the upsert so the event can record what it moved FROM.
+  const previous = await prisma.vendorSubscription.findUnique({
+    where: { vendorId },
+    select: { id: true, status: true },
+  });
+
   await prisma.vendorSubscription.upsert({
     where: { vendorId },
     update: {
@@ -64,6 +71,10 @@ export async function activateSubscriptionFromPaystackData(
       currentPeriodStart: paidAt,
       currentPeriodEnd,
       monthlyAmount: PLAN_AMOUNTS_NAIRA[plan],
+      // MUST be cleared on payment. Leaving a stale grace date behind would
+      // mean the NEXT lapse reads an already-past graceEndsAt and locks the
+      // vendor out instantly instead of giving them their 7 days.
+      graceEndsAt: null,
       ...(paystackCustomerId ? { paystackCustomerId } : {}),
       ...(paystackSubscriptionCode ? { paystackSubscriptionCode } : {}),
     },
@@ -77,6 +88,17 @@ export async function activateSubscriptionFromPaystackData(
       paystackCustomerId: paystackCustomerId ?? null,
       paystackSubscriptionCode: paystackSubscriptionCode ?? null,
     },
+  });
+
+  await recordSubscriptionEvent({
+    vendorId,
+    subscriptionId: previous?.id ?? null,
+    fromStatus: previous?.status ?? null,
+    toStatus: "ACTIVE",
+    plan,
+    monthlyAmount: PLAN_AMOUNTS_NAIRA[plan],
+    reason: "paystack_charge_success",
+    occurredAt: paidAt,
   });
 
   await prisma.notification.create({

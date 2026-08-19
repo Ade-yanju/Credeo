@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { hasOrgAdminAccess, requireTenantContext } from "@/lib/tenant-context";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 import { ipFromRequest, writeAudit } from "@/lib/audit";
 
 const updateSchema = z.object({
@@ -17,6 +18,8 @@ async function loadMembership(id: string, organizationId: string) {
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await requireTenantContext();
+  const denied = entitlementDenied(ctx.vendor.subscription, "tenant.write");
+  if (denied) return denied;
   if (!hasOrgAdminAccess(ctx)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -69,6 +72,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await requireTenantContext();
+  // Revoking access stays available on a locked account — see the note on
+  // tenant.revoke in lib/entitlement.ts. Never hold a security risk open as
+  // billing pressure.
+  const denied = entitlementDenied(ctx.vendor.subscription, "tenant.revoke");
+  if (denied) return denied;
   if (!hasOrgAdminAccess(ctx)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

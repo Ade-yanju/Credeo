@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { hasTenantWriteAccess, requireTenantContext } from "@/lib/tenant-context";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 import { ipFromRequest, writeAudit } from "@/lib/audit";
 
 const updateSchema = z.object({
@@ -21,6 +22,8 @@ async function load(id: string, organizationId: string) {
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await requireTenantContext();
+  const denied = entitlementDenied(ctx.vendor.subscription, "product.write");
+  if (denied) return denied;
   if (!hasTenantWriteAccess(ctx) || !ctx.organizationId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -63,6 +66,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await requireTenantContext();
+  const denied = entitlementDenied(ctx.vendor.subscription, "product.write");
+  if (denied) return denied;
   if (!hasTenantWriteAccess(ctx) || !ctx.organizationId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

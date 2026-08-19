@@ -19,7 +19,10 @@ import { WhatsAppChat } from "@/components/ui/whatsapp-chat";
 import { SiteNav } from "@/components/marketing/site-nav";
 import { SiteFooter } from "@/components/marketing/site-footer";
 import { useScrollSteps } from "@/hooks/use-scroll-steps";
-import { ADD_CONVERSATION, REMINDER_CONVERSATION } from "@/lib/whatsapp-demo-data";
+import {
+  ADD_CONVERSATION,
+  REMINDER_CONVERSATION,
+} from "@/lib/whatsapp-demo-data";
 
 /**
  * Marketing landing page.
@@ -201,7 +204,7 @@ export default function LandingPage() {
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
             <Link href="/register">
               <ShimmerButton className="w-full gap-2 px-7 sm:w-auto">
-                Start free trial <ArrowRight size={16} />
+                Get Started <ArrowRight size={16} />
               </ShimmerButton>
             </Link>
             <a
@@ -218,7 +221,10 @@ export default function LandingPage() {
               { value: "15 sec", label: "to log a credit" },
               { value: "60 days", label: "free trial" },
             ].map((s) => (
-              <div key={s.label} className="bg-[color:var(--surface-1)] px-4 py-3.5">
+              <div
+                key={s.label}
+                className="bg-[color:var(--surface-1)] px-4 py-3.5"
+              >
                 <dt className="sr-only">{s.label}</dt>
                 <dd className="tnum text-[19px] leading-none text-[color:var(--text-primary)]">
                   {s.value}
@@ -289,10 +295,26 @@ export default function LandingPage() {
 
               <dl className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
                 {[
-                  { label: "Owed to you", value: "₦142,500", tone: "text-[color:var(--text-primary)]" },
-                  { label: "Paid this month", value: "₦38,000", tone: "text-[#56C963]" },
-                  { label: "Overdue", value: "7 credits", tone: "text-[#F0736B]" },
-                  { label: "Recovery rate", value: "71%", tone: "text-[color:var(--text-primary)]" },
+                  {
+                    label: "Owed to you",
+                    value: "₦142,500",
+                    tone: "text-[color:var(--text-primary)]",
+                  },
+                  {
+                    label: "Paid this month",
+                    value: "₦38,000",
+                    tone: "text-[#56C963]",
+                  },
+                  {
+                    label: "Overdue",
+                    value: "7 credits",
+                    tone: "text-[#F0736B]",
+                  },
+                  {
+                    label: "Recovery rate",
+                    value: "71%",
+                    tone: "text-[color:var(--text-primary)]",
+                  },
                 ].map((s) => (
                   <div
                     key={s.label}
@@ -313,9 +335,24 @@ export default function LandingPage() {
                   Overdue credits
                 </p>
                 {[
-                  { name: "Tunde Adesanya", matric: "100L/ECO/23", amount: "₦4,500", days: 5 },
-                  { name: "Bimpe Olawale", matric: "200L/LAW/22", amount: "₦2,000", days: 3 },
-                  { name: "Emeka Chukwu", matric: "300L/MED/21", amount: "₦8,750", days: 12 },
+                  {
+                    name: "Tunde Adesanya",
+                    matric: "100L/ECO/23",
+                    amount: "₦4,500",
+                    days: 5,
+                  },
+                  {
+                    name: "Bimpe Olawale",
+                    matric: "200L/LAW/22",
+                    amount: "₦2,000",
+                    days: 3,
+                  },
+                  {
+                    name: "Emeka Chukwu",
+                    matric: "300L/MED/21",
+                    amount: "₦8,750",
+                    days: 12,
+                  },
                 ].map((row) => (
                   <div
                     key={row.name}
@@ -344,7 +381,10 @@ export default function LandingPage() {
       </section>
 
       {/* ── How it works ───────────────────────────────────────────── */}
-      <section id="how-it-works" className="scroll-mt-20 px-6 py-20 md:px-12 md:py-28">
+      <section
+        id="how-it-works"
+        className="scroll-mt-20 px-6 py-20 md:px-12 md:py-28"
+      >
         <div className="mx-auto max-w-6xl">
           <motion.div {...anim} className="mb-14 max-w-xl">
             <p className="eyebrow mb-4">Simple by design</p>
@@ -362,7 +402,10 @@ export default function LandingPage() {
       </section>
 
       {/* ── Features ───────────────────────────────────────────────── */}
-      <section id="features" className="scroll-mt-20 px-6 py-20 md:px-12 md:py-28">
+      <section
+        id="features"
+        className="scroll-mt-20 px-6 py-20 md:px-12 md:py-28"
+      >
         <motion.div {...anim} className="mx-auto max-w-6xl">
           <div className="mb-12 max-w-xl">
             <p className="eyebrow mb-4">Everything you need</p>
@@ -421,7 +464,10 @@ export default function LandingPage() {
       </section>
 
       {/* ── Pricing ────────────────────────────────────────────────── */}
-      <section id="pricing" className="scroll-mt-20 px-6 py-20 md:px-12 md:py-28">
+      <section
+        id="pricing"
+        className="scroll-mt-20 px-6 py-20 md:px-12 md:py-28"
+      >
         <motion.div {...anim} className="mx-auto max-w-6xl">
           <div className="mb-12 max-w-xl">
             <p className="eyebrow mb-4">Pricing</p>
@@ -491,7 +537,10 @@ export default function LandingPage() {
               // The recommended tier gets the gold-hairline treatment; the rest
               // sit on the standard card surface.
               return tier.popular ? (
-                <AnimatedBorder key={tier.plan} className="flex h-full flex-col p-6">
+                <AnimatedBorder
+                  key={tier.plan}
+                  className="flex h-full flex-col p-6"
+                >
                   {body}
                 </AnimatedBorder>
               ) : (

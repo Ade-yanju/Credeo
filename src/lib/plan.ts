@@ -1,4 +1,5 @@
-import type { SubscriptionPlan, SubscriptionStatus } from "@prisma/client";
+import type { SubscriptionPlan } from "@prisma/client";
+import { getEntitlement, type SubscriptionLike } from "@/lib/entitlement";
 
 // Maximum unique customers a vendor can have credits with per plan tier.
 // null = unlimited
@@ -12,29 +13,21 @@ export function getStudentLimit(plan: SubscriptionPlan): number | null {
   return PLAN_STUDENT_LIMITS[plan];
 }
 
-// Returns true if the vendor is allowed to add more customers.
-export function isPlanActive(subscription: {
-  status: SubscriptionStatus;
-  trialEndsAt: Date | null;
-  currentPeriodEnd: Date | null;
-} | null): boolean {
-  if (!subscription) return true; // Default to allowing if no record (though register creates one)
-
-  const { status, trialEndsAt, currentPeriodEnd } = subscription;
-  const now = new Date();
-
-  if (status === "ACTIVE") {
-    // If we have an end date, check it. If not, assume active (Paystack handles lifecycle)
-    if (currentPeriodEnd && currentPeriodEnd < now) return false;
-    return true;
-  }
-
-  if (status === "TRIAL") {
-    if (trialEndsAt && trialEndsAt < now) return false;
-    return true;
-  }
-
-  return false;
+/**
+ * Returns true if the vendor may perform paid write actions.
+ *
+ * Now a thin delegate to getEntitlement() — the single authority (see
+ * lib/entitlement.ts). Kept so the existing call sites (reminder cron, the
+ * WhatsApp webhook, credit- and invoice-lifecycle) keep reading naturally,
+ * and so they inherit the 7-day grace window for free.
+ *
+ * BEHAVIOUR CHANGE: this used to return TRUE for a vendor with no
+ * subscription row, which was an unlimited free pass. It now fails CLOSED.
+ * The 20260818000000_subscription_entitlement migration backfills a trial row
+ * for every vendor that lacked one.
+ */
+export function isPlanActive(subscription: SubscriptionLike): boolean {
+  return getEntitlement(subscription).canWrite;
 }
 
 export function planDisplayName(plan: SubscriptionPlan): string {

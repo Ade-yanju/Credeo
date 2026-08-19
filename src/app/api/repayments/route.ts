@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getSessionPhone } from "@/lib/session";
+import { guardVendorWrite } from "@/lib/entitlement-guard";
 import type { RepaymentMethod } from "@prisma/client";
 
 const schema = z.object({
@@ -13,11 +13,13 @@ const schema = z.object({
 
 // POST /api/repayments — shortcut to PATCH /api/credits/[id] for simple payment recording
 export async function POST(req: NextRequest) {
-  const phone = getSessionPhone();
-  if (!phone) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const vendor = await prisma.vendor.findUnique({ where: { phone } });
-  if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
+  // Recording money a customer actually paid stays allowed even after the
+  // trial lapses (see ALLOWED_WHEN_LOCKED in lib/entitlement.ts). Blocking it
+  // would push the vendor back to paper and cost us the repayment history
+  // that is the whole point of Phase 1.
+  const guard = await guardVendorWrite("repayment.create");
+  if (!guard.ok) return guard.response;
+  const { vendor } = guard;
 
   const json = await req.json();
   const parsed = schema.safeParse(json);

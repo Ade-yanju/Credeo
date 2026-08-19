@@ -6,7 +6,44 @@ import { useState } from "react";
 type VendorOption = { id: string; businessName: string; phone: string; email: string };
 type AdminOption = { id: string; name: string };
 
-export function AcquisitionDetailClient({ prospect, admins, canWrite }: { prospect: any; admins: AdminOption[]; canWrite: boolean }) {
+// The prospect arrives JSON-serialised from the server page, so every DateTime
+// on the Prisma row reaches us as a string and enums as their string values.
+type ProspectActivity = {
+  id: string;
+  type: string;
+  outcome: string | null;
+  body: string | null;
+  occurredAt: string;
+  createdBy: { name: string } | null;
+};
+
+type ProspectDetail = {
+  id: string;
+  businessName: string;
+  contactName: string | null;
+  phone: string | null;
+  email: string | null;
+  vendorType: string | null;
+  fit: string;
+  source: string;
+  stage: string;
+  assignedToAdminId: string | null;
+  nextActionAt: string | null;
+  lossReason: string | null;
+  unqualifiedReason: string | null;
+  convertedVendorId: string | null;
+  campaign: { name: string } | null;
+  assignedTo: { id: string; name: string } | null;
+  convertedVendor: {
+    id: string;
+    businessName: string;
+    subscription: { status: string } | null;
+    _count: { credits: number };
+  } | null;
+  activities: ProspectActivity[];
+};
+
+export function AcquisitionDetailClient({ prospect, admins, canWrite }: { prospect: ProspectDetail; admins: AdminOption[]; canWrite: boolean }) {
   const [busy, setBusy] = useState(false);
   const [vendors, setVendors] = useState<VendorOption[]>([]);
   const [vendorQuery, setVendorQuery] = useState("");
@@ -67,11 +104,11 @@ export function AcquisitionDetailClient({ prospect, admins, canWrite }: { prospe
     <div className="grid md:grid-cols-3 gap-4"><Card title="Acquisition" text={label(prospect.source) + (prospect.campaign ? ` · ${prospect.campaign.name}` : "")} /><Card title="Owner / next action" text={`${prospect.assignedTo?.name ?? "Unassigned"}${prospect.nextActionAt ? ` · ${new Date(prospect.nextActionAt).toLocaleString("en-NG")}` : ""}`} /><Card title="Fit / segment" text={`${prospect.fit} · ${label(prospect.vendorType ?? "Unclassified")}`} /></div>
     {canWrite && (prospect.stage === "LOST" || prospect.stage === "UNQUALIFIED") ? <ReopenForm admins={admins} busy={busy} submit={updatePipeline} /> : canWrite && <PipelineForm prospect={prospect} admins={admins} busy={busy} submit={updatePipeline} />}
     {canWrite && <section className="surface-card p-5 space-y-3"><h2 className="font-semibold">Conversion</h2>{prospect.convertedVendor ? <p className="text-sm text-emerald-400">Linked to {prospect.convertedVendor.businessName}. Credits: {prospect.convertedVendor._count.credits}; subscription: {prospect.convertedVendor.subscription?.status ?? "none"}.</p> : <><button onClick={registrationLink} disabled={busy} className="btn-gold rounded-lg px-3 py-2 text-sm">Copy prospect registration link</button><div className="flex gap-2"><input value={vendorQuery} onChange={(event) => setVendorQuery(event.target.value)} placeholder="Business name if no exact contact match" className="input-dark rounded-lg px-3 py-2 text-sm flex-1" /><button onClick={searchVendors} disabled={busy} className="btn-ghost rounded-lg px-3 text-sm">Search vendors</button></div>{searchMessage && <p className="text-xs text-vodium-cream/45">{searchMessage}</p>}{vendors.length > 0 && <div className="flex gap-2"><select id="vendor-match" className="input-dark rounded-lg px-3 py-2 text-sm flex-1"><option value="">Confirm a matching vendor…</option>{vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.businessName} · {vendor.phone}</option>)}</select><button onClick={() => match((document.getElementById("vendor-match") as HTMLSelectElement).value)} className="btn-ghost rounded-lg px-3 text-sm">Confirm match</button></div>}</>}</section>}
-    <section className="grid lg:grid-cols-2 gap-5"><div className="surface-card p-5"><h2 className="font-semibold mb-4">Activity timeline</h2>{prospect.activities.length ? prospect.activities.map((activity: any) => <div key={activity.id} className="border-l border-vodium-gold/30 pl-3 pb-4"><p className="text-sm text-vodium-cream">{label(activity.type)} {activity.outcome && `· ${activity.outcome}`}</p>{activity.body && <p className="text-xs text-vodium-cream/45 mt-1">{activity.body}</p>}<p className="text-[10px] text-vodium-cream/30 mt-1">{new Date(activity.occurredAt).toLocaleString("en-NG")} · {activity.createdBy?.name ?? "System"}</p></div>) : <p className="text-sm text-vodium-cream/35">No activity yet.</p>}</div>{canWrite && <ActivityForm closed={closed} busy={busy} submit={addActivity} />}</section>
+    <section className="grid lg:grid-cols-2 gap-5"><div className="surface-card p-5"><h2 className="font-semibold mb-4">Activity timeline</h2>{prospect.activities.length ? prospect.activities.map((activity: ProspectActivity) => <div key={activity.id} className="border-l border-vodium-gold/30 pl-3 pb-4"><p className="text-sm text-vodium-cream">{label(activity.type)} {activity.outcome && `· ${activity.outcome}`}</p>{activity.body && <p className="text-xs text-vodium-cream/45 mt-1">{activity.body}</p>}<p className="text-[10px] text-vodium-cream/30 mt-1">{new Date(activity.occurredAt).toLocaleString("en-NG")} · {activity.createdBy?.name ?? "System"}</p></div>) : <p className="text-sm text-vodium-cream/35">No activity yet.</p>}</div>{canWrite && <ActivityForm closed={closed} busy={busy} submit={addActivity} />}</section>
   </div>;
 }
 
-function PipelineForm({ prospect, admins, busy, submit }: { prospect: any; admins: AdminOption[]; busy: boolean; submit: (form: HTMLFormElement) => void }) {
+function PipelineForm({ prospect, admins, busy, submit }: { prospect: ProspectDetail; admins: AdminOption[]; busy: boolean; submit: (form: HTMLFormElement) => void }) {
   const stages = [prospect.stage, ...nextStages(prospect)].filter((stage, index, list) => list.indexOf(stage) === index);
   return <section className="surface-card p-5 space-y-3"><h2 className="font-semibold">Pipeline control</h2><form onSubmit={(event) => { event.preventDefault(); submit(event.currentTarget); }} className="grid md:grid-cols-2 gap-3"><label className="text-xs text-vodium-cream/50">Stage<select name="stage" defaultValue={prospect.stage} className="input-dark w-full rounded-lg p-2 mt-1">{stages.map((stage) => <option key={stage} value={stage}>{label(stage)}</option>)}</select></label><OwnerSelect admins={admins} value={prospect.assignedToAdminId} /><label className="text-xs text-vodium-cream/50">Loss reason<input name="lossReason" defaultValue={prospect.lossReason ?? ""} className="input-dark w-full rounded-lg p-2 mt-1" /></label><label className="text-xs text-vodium-cream/50">Unqualified reason<input name="unqualifiedReason" defaultValue={prospect.unqualifiedReason ?? ""} className="input-dark w-full rounded-lg p-2 mt-1" /></label><button disabled={busy} className="btn-ghost rounded-lg px-3 py-2 text-sm w-fit">{busy ? "Saving…" : "Save pipeline"}</button></form></section>;
 }
@@ -86,6 +123,6 @@ function ActivityForm({ closed, busy, submit }: { closed: boolean; busy: boolean
 
 function OwnerSelect({ admins, value }: { admins: AdminOption[]; value?: string | null }) { return <label className="text-xs text-vodium-cream/50">Owner<select name="assignedToAdminId" defaultValue={value ?? ""} required className="input-dark w-full rounded-lg p-2 mt-1"><option value="">Select owner…</option>{admins.map((admin) => <option key={admin.id} value={admin.id}>{admin.name}</option>)}</select></label>; }
 function ActionSelect({ required = false }: { required?: boolean }) { return <label className="text-xs text-vodium-cream/50">Next action<select name="nextActionType" required={required} className="input-dark w-full rounded-lg p-2 mt-1"><option value="">No new next action</option><option value="CALL">Call</option><option value="WHATSAPP">WhatsApp</option><option value="EMAIL">Email</option><option value="MEETING">Meeting</option><option value="DEMO">Demo</option><option value="VISIT">Visit</option></select></label>; }
-function nextStages(prospect: any) { const next: Record<string, string | undefined> = { IDENTIFIED: "CONTACTED", CONTACTED: "RESPONDED", RESPONDED: "QUALIFIED", QUALIFIED: "DEMO_SCHEDULED", DEMO_SCHEDULED: "DEMO_COMPLETED", DEMO_COMPLETED: prospect.convertedVendorId ? "ONBOARDING" : undefined }; return [next[prospect.stage], "LOST", "UNQUALIFIED"].filter((stage): stage is string => Boolean(stage)); }
+function nextStages(prospect: Pick<ProspectDetail, "stage" | "convertedVendorId">) { const next: Record<string, string | undefined> = { IDENTIFIED: "CONTACTED", CONTACTED: "RESPONDED", RESPONDED: "QUALIFIED", QUALIFIED: "DEMO_SCHEDULED", DEMO_SCHEDULED: "DEMO_COMPLETED", DEMO_COMPLETED: prospect.convertedVendorId ? "ONBOARDING" : undefined }; return [next[prospect.stage], "LOST", "UNQUALIFIED"].filter((stage): stage is string => Boolean(stage)); }
 function label(value: string) { return value.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase()); }
 function Card({ title, text }: { title: string; text: string }) { return <div className="surface-card p-4"><p className="text-xs text-vodium-cream/35">{title}</p><p className="text-sm text-vodium-cream/70 mt-2">{text}</p></div>; }

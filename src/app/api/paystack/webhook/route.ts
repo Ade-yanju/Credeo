@@ -7,6 +7,8 @@ import {
   type PaystackPaymentData,
 } from "@/lib/paystack/subscription";
 import { syncProspectLifecycleForVendor } from "@/lib/acquisition";
+import { recordSubscriptionEvent } from "@/lib/subscription-events";
+import { GRACE_DAYS } from "@/lib/entitlement";
 
 interface PaystackData extends PaystackPaymentData {
   subscription_code?: string;
@@ -132,9 +134,26 @@ export async function POST(req: NextRequest) {
           where: { paystackSubscriptionCode: paystackCode },
         });
         if (sub) {
+          // A cancelled subscription still keeps whatever period was paid for,
+          // then gets the standard grace window on top.
+          const lapsesAt = sub.currentPeriodEnd && sub.currentPeriodEnd > new Date()
+            ? sub.currentPeriodEnd
+            : new Date();
           await prisma.vendorSubscription.update({
             where: { id: sub.id },
-            data: { status: "CANCELLED" },
+            data: {
+              status: "CANCELLED",
+              graceEndsAt: new Date(lapsesAt.getTime() + GRACE_DAYS * 86_400_000),
+            },
+          });
+          await recordSubscriptionEvent({
+            vendorId: sub.vendorId,
+            subscriptionId: sub.id,
+            fromStatus: sub.status,
+            toStatus: "CANCELLED",
+            plan: sub.plan,
+            monthlyAmount: sub.monthlyAmount.toString(),
+            reason: "paystack_subscription_disabled",
           });
           await prisma.notification.create({
             data: {
@@ -158,7 +177,20 @@ export async function POST(req: NextRequest) {
         if (sub) {
           await prisma.vendorSubscription.update({
             where: { id: sub.id },
-            data: { status: "PAST_DUE" },
+            data: {
+              status: "PAST_DUE",
+              // Payment failed today, so grace runs from today.
+              graceEndsAt: new Date(Date.now() + GRACE_DAYS * 86_400_000),
+            },
+          });
+          await recordSubscriptionEvent({
+            vendorId: sub.vendorId,
+            subscriptionId: sub.id,
+            fromStatus: sub.status,
+            toStatus: "PAST_DUE",
+            plan: sub.plan,
+            monthlyAmount: sub.monthlyAmount.toString(),
+            reason: "paystack_payment_failed",
           });
           await prisma.notification.create({
             data: {

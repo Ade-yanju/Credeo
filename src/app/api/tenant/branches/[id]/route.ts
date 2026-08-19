@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { hasOrgAdminAccess, requireTenantContext } from "@/lib/tenant-context";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 import { ipFromRequest, writeAudit } from "@/lib/audit";
 
 const updateSchema = z.object({
@@ -15,6 +16,8 @@ const updateSchema = z.object({
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await requireTenantContext();
+  const denied = entitlementDenied(ctx.vendor.subscription, "tenant.write");
+  if (denied) return denied;
   if (!hasOrgAdminAccess(ctx)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

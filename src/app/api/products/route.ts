@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canAccessBranch, hasTenantWriteAccess, requireTenantContext } from "@/lib/tenant-context";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 import { ipFromRequest, writeAudit } from "@/lib/audit";
 
 const productSchema = z.object({
@@ -34,6 +35,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const ctx = await requireTenantContext();
+  const denied = entitlementDenied(ctx.vendor.subscription, "product.write");
+  if (denied) return denied;
   if (!hasTenantWriteAccess(ctx)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

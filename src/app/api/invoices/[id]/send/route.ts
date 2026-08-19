@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hasTenantWriteAccess, requireTenantContext } from "@/lib/tenant-context";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 import { signInvoiceToken } from "@/lib/bnpl-token";
 import { getOrgChannelCredentials } from "@/lib/whatsapp/channel-token";
 import { sendCustomerInvoice } from "@/lib/whatsapp/invoice-delivery";
@@ -13,6 +14,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!hasTenantWriteAccess(ctx) || !ctx.organizationId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  // Sending an invoice is outbound messaging on our WhatsApp number — a paid
+  // action, and one that costs real money per send.
+  const denied = entitlementDenied(ctx.vendor.subscription, "invoice.send");
+  if (denied) return denied;
 
   const invoice = await prisma.invoice.findFirst({
     where: { id: params.id, organizationId: ctx.organizationId },
