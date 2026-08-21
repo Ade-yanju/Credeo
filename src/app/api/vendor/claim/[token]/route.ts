@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { parseCommunity } from "@/lib/community";
 import { createSoloOrganizationForVendor, trialEndsAt } from "@/lib/tenant";
 import { setVendorSession } from "@/lib/session";
+import { linkProspectToVendor } from "@/lib/acquisition";
 
 const VENDOR_TYPES = ["PROVISION_SHOP", "FOOD_CANTEEN", "LAUNDRY", "PRINTING", "BARBING_SALON", "HAIR_SALON", "PHARMACY", "MINI_MART", "OTHER"] as const;
 const claimSchema = z.object({
@@ -67,6 +68,17 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   if (!vendor) return NextResponse.json({ error: "This claim link has already been used or expired." }, { status: 410 });
 
   await createSoloOrganizationForVendor(vendor);
+  // Claim links issued from Acquisition do not carry a public prospect id. Match
+  // only on the verified contact data stored in the one-time invite.
+  const acquisitionProspect = await prisma.acquisitionProspect.findFirst({
+    where: { OR: [{ phone: prospect.phone }, { email: prospect.email }], convertedVendorId: null },
+    orderBy: { createdAt: "desc" }, select: { id: true },
+  });
+  if (acquisitionProspect) {
+    await linkProspectToVendor(acquisitionProspect.id, vendor.id).catch((err) =>
+      console.error("[vendor-claim] acquisition link failed:", err)
+    );
+  }
   setVendorSession(vendor.phone);
   return NextResponse.json({ ok: true, vendorId: vendor.id });
 }

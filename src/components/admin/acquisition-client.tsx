@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Plus, Target, AlertTriangle, CalendarClock, Users } from "lucide-react";
+import { Plus, Target, AlertTriangle, CalendarClock, Users, Search } from "lucide-react";
 import type { AcquisitionDashboardData } from "@/lib/admin/acquisition";
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -16,6 +16,7 @@ export function AcquisitionClient({ data, canWrite }: { data: AcquisitionDashboa
   const [query, setQuery] = useState("");
   const [stage, setStage] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [showDiscovery, setShowDiscovery] = useState(false);
   const [showCampaignCreate, setShowCampaignCreate] = useState(false);
   const [busy, setBusy] = useState(false);
   const visible = useMemo(() => data.prospects.filter((p) =>
@@ -51,11 +52,21 @@ export function AcquisitionClient({ data, canWrite }: { data: AcquisitionDashboa
     if (!res.ok) return window.alert((await res.json()).error ?? "Could not create campaign");
     window.location.reload();
   }
+  async function discover(form: HTMLFormElement) {
+    setBusy(true);
+    const body = Object.fromEntries(new FormData(form).entries());
+    const res = await fetch("/api/admin/acquisition/discover", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const json = await res.json();
+    setBusy(false);
+    if (!res.ok) return window.alert(json.error ?? "Web discovery could not run");
+    window.alert(`Found ${json.found} public listings. Added ${json.imported}; skipped ${json.skipped} duplicates.\n\n${json.message}`);
+    window.location.reload();
+  }
   return (
     <div className="p-5 md:p-8 max-w-7xl mx-auto space-y-7">
       <div className="flex items-start justify-between gap-4">
         <div><p className="text-xs uppercase tracking-[0.2em] text-vodium-gold">Merchant acquisition</p><h1 className="font-serif text-2xl md:text-3xl text-vodium-cream mt-1">Prospects and conversion</h1><p className="text-sm text-vodium-cream/45 mt-1">A focused operating queue for turning merchant leads into active Vodium vendors.</p></div>
-        {canWrite && <button onClick={() => setShowCreate(true)} className="btn-gold rounded-lg px-3.5 py-2 text-sm"><Plus size={15} className="mr-1.5" /> Add prospect</button>}
+        {canWrite && <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={() => setShowDiscovery(true)} className="inline-flex h-10 items-center justify-center rounded-lg border border-vodium-gold/45 px-4 text-sm font-semibold text-vodium-gold transition-colors hover:bg-vodium-gold/10 focus:outline-none focus:ring-2 focus:ring-vodium-gold/50"><Search size={16} className="mr-2" /> Find Nigerian businesses</button><button type="button" onClick={() => setShowCreate(true)} className="btn-gold inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold shadow-sm transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-vodium-gold/60"><Plus size={16} className="mr-2" /> Add prospect</button></div>}
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -94,9 +105,13 @@ export function AcquisitionClient({ data, canWrite }: { data: AcquisitionDashboa
         </tbody></table></div>
       </section>
       {showCreate && <CreateModal data={data} busy={busy} close={() => setShowCreate(false)} submit={create} />}
+      {showDiscovery && <DiscoveryModal busy={busy} close={() => setShowDiscovery(false)} submit={discover} />}
       {showCampaignCreate && <CampaignModal data={data} busy={busy} close={() => setShowCampaignCreate(false)} submit={createCampaign} />}
     </div>
   );
+}
+function DiscoveryModal({ busy, close, submit }: { busy: boolean; close: () => void; submit: (form: HTMLFormElement) => void }) {
+  return <div className="fixed inset-0 z-50 bg-black/70 p-4 overflow-auto"><form onSubmit={(e) => { e.preventDefault(); submit(e.currentTarget); }} className="max-w-xl mx-auto my-8 bg-vodium-charcoal rounded-2xl border border-white/[0.1] p-6 space-y-4"><div className="flex justify-between gap-4"><div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-vodium-gold">Nigeria only</p><h2 className="font-serif text-xl">Find public business listings</h2><p className="text-xs text-vodium-cream/45 mt-1">Searches Nigerian Google Maps listings and adds unique businesses as identified prospects.</p></div><button type="button" onClick={close} className="rounded-md px-2 py-1 text-sm text-vodium-cream/50 transition-colors hover:bg-white/5 hover:text-vodium-cream focus:outline-none focus:ring-2 focus:ring-vodium-gold/50">Close</button></div><div className="grid md:grid-cols-2 gap-3"><div className="md:col-span-2"><Field name="query" label="Business search" required /><p className="text-[11px] text-vodium-cream/35 mt-1">Example: provision shops near University of Lagos</p></div><Field name="city" label="Nigerian city (optional)" /><Field name="state" label="Nigerian state (optional)" /><label className="text-xs text-vodium-cream/50">Listings to look for<select name="limit" defaultValue="50" className="input-dark w-full rounded-lg px-3 py-2 mt-1"><option value="50">50</option><option value="100">100</option><option value="250">250</option><option value="500">500</option></select></label></div><p className="rounded-lg border border-vodium-gold/20 bg-vodium-gold/5 p-3 text-xs text-vodium-cream/55">Only publicly returned business information is imported. Listings may not include email addresses; the team should verify contact details before outreach or sending a claim link.</p><div className="flex justify-end gap-2 border-t border-white/[0.08] pt-4"><button type="button" onClick={close} disabled={busy} className="h-10 rounded-lg px-4 text-sm font-semibold text-vodium-cream/60 transition-colors hover:bg-white/5 hover:text-vodium-cream disabled:opacity-50">Cancel</button><button disabled={busy} className="btn-gold inline-flex h-10 items-center rounded-lg px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60">{busy ? "Searching Nigeria…" : "Find and add prospects"}</button></div></form></div>;
 }
 function CampaignModal({ data, busy, close, submit }: { data: AcquisitionDashboardData; busy: boolean; close: () => void; submit: (form: HTMLFormElement) => void }) {
   return <div className="fixed inset-0 z-50 bg-black/70 p-4 overflow-auto"><form onSubmit={(e) => { e.preventDefault(); submit(e.currentTarget); }} className="max-w-xl mx-auto my-8 bg-vodium-charcoal rounded-2xl border border-white/[0.1] p-6 space-y-4"><div className="flex justify-between"><h2 className="font-serif text-xl">New acquisition campaign</h2><button type="button" onClick={close} className="text-vodium-cream/50">Close</button></div><div className="grid md:grid-cols-2 gap-3"><Field name="name" label="Campaign name" required /><Select name="source" label="Primary source" values={sourceValues} labels={SOURCE_LABEL} required /><Select name="ownerAdminId" label="Owner" values={data.admins.map((a) => a.id)} labels={Object.fromEntries(data.admins.map((a) => [a.id, a.name]))} /><Select name="status" label="Status" values={["DRAFT", "ACTIVE", "PAUSED", "COMPLETED"]} /><Field name="budgetAmount" label="Budget (₦)" type="number" /><label className="text-xs text-vodium-cream/50">Start date<input name="startAt" type="datetime-local" className="input-dark w-full rounded-lg px-3 py-2 mt-1" /></label></div><label className="text-xs text-vodium-cream/50 block">Notes<textarea name="notes" className="input-dark w-full rounded-lg px-3 py-2 mt-1 min-h-20" /></label><button disabled={busy} className="btn-gold rounded-lg px-4 py-2 text-sm">{busy ? "Saving…" : "Create campaign"}</button></form></div>;

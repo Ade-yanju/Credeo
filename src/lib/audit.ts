@@ -57,7 +57,9 @@ export type AuditAction =
   | "acquisition.activity_created"
   | "acquisition.campaign_created"
   | "acquisition.campaign_updated"
-  | "acquisition.vendor_linked";
+  | "acquisition.vendor_linked"
+  | "acquisition.web_discovery"
+  | "acquisition.claim_link_created";
 
 export interface AuditInput {
   actorType: AuditActorType;
