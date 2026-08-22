@@ -32,12 +32,14 @@ export async function discoverBusinesses(input: {
   const key = process.env.SERPAPI_KEY;
   if (!key) throw new Error("Web discovery is not configured. Add SERPAPI_KEY to the server environment.");
 
-  // SerpApi's Google Maps endpoint is a supported search-data source. Keep
-  // requests bounded: a browser action should not fan out into an uncontrolled
-  // crawl. The admin can run another targeted search when more coverage is due.
+  // SerpApi's Google Maps endpoint is a supported search-data source. The Maps
+  // API recommends paging only through start=100; larger offsets become noisy.
+  // A 500-item request is therefore intentionally capped at the 100 reliable
+  // listings the provider can return for one search.
   const results: DiscoveredBusiness[] = [];
   const seen = new Set<string>();
-  const pages = Math.ceil(input.limit / 20);
+  const requestedLimit = Math.min(input.limit, 120);
+  const pages = Math.ceil(requestedLimit / 20);
   // `gl=ng` localises the Maps result set to Nigeria. Adding the country to
   // the query prevents an ambiguous business/location phrase from drifting to
   // a similarly named place abroad.
@@ -47,15 +49,20 @@ export async function discoverBusinesses(input: {
     : input.query;
   const nigeriaQuery = /\bnigeria\b/i.test(queryWithLocality) ? queryWithLocality : `${queryWithLocality}, Nigeria`;
   const payloads = await Promise.all(Array.from({ length: pages }, async (_, page) => {
-    const url = new URL("https://serpapi.com/search.json");
+    const url = new URL("https://serpapi.com/search");
     url.searchParams.set("engine", "google_maps");
+    url.searchParams.set("type", "search");
     url.searchParams.set("q", nigeriaQuery);
     url.searchParams.set("gl", "ng");
     url.searchParams.set("hl", "en");
     url.searchParams.set("start", String(page * 20));
     url.searchParams.set("api_key", key);
     const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
-    if (!response.ok) throw new Error(`Search provider returned ${response.status}`);
+    if (response.status === 401 || response.status === 403) {
+      const detail = (await response.text()).replace(/\s+/g, " ").slice(0, 180);
+      throw new Error(`Nigeria business search was rejected by SerpApi (${response.status}). Check that the production SERPAPI_KEY is a SerpApi private API key with active credits, then redeploy. ${detail || ""}`.trim());
+    }
+    if (!response.ok) throw new Error(`The business search provider is temporarily unavailable (HTTP ${response.status}). Please try again.`);
     const payload = await response.json() as { local_results?: SerpMapsResult[]; error?: string };
     if (payload.error) throw new Error(payload.error);
     return payload.local_results ?? [];

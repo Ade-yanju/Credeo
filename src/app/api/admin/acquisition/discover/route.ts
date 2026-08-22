@@ -51,6 +51,8 @@ export async function POST(req: NextRequest) {
     void writeAudit({ actorType: "admin", actorId: session.id, action: "acquisition.web_discovery", entityType: "AcquisitionProspect", entityId: null, ipAddress: ipFromRequest(req), metadata: { query: parsed.data.query, requested: parsed.data.limit, found: businesses.length, imported, skipped } });
     return NextResponse.json({ found: businesses.length, imported, skipped, message: "Public listings were added as identified prospects. Email is only stored when a configured source provides it; it is never guessed." });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Web discovery failed" }, { status: 502 });
+    const message = error instanceof Error ? error.message : "Web discovery failed";
+    const status = /rejected by SerpApi/.test(message) ? 401 : 502;
+    return NextResponse.json({ error: message }, { status });
   }
 }
