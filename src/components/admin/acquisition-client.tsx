@@ -19,6 +19,7 @@ export function AcquisitionClient({ data, canWrite }: { data: AcquisitionDashboa
   const [showDiscovery, setShowDiscovery] = useState(false);
   const [showCampaignCreate, setShowCampaignCreate] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ title: string; message: string; reload?: boolean } | null>(null);
   const visible = useMemo(() => data.prospects.filter((p) =>
     (!stage || p.stage === stage) && (!query || [p.businessName, p.contactName, p.phone, p.email].filter(Boolean).join(" ").toLowerCase().includes(query.toLowerCase()))
   ), [data.prospects, query, stage]);
@@ -35,10 +36,10 @@ export function AcquisitionClient({ data, canWrite }: { data: AcquisitionDashboa
       if (!window.confirm("A matching prospect or vendor exists. Create a separate prospect anyway?")) return;
       body.forceCreate = true;
       const retry = await fetch("/api/admin/acquisition/prospects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (!retry.ok) return window.alert((await retry.json()).error ?? "Could not create prospect");
+      if (!retry.ok) return setNotice({ title: "Could not create prospect", message: (await retry.json()).error ?? "Please review the details and try again." });
       window.location.reload(); return;
     }
-    if (!res.ok) return window.alert(json.error ?? "Could not create prospect");
+    if (!res.ok) return setNotice({ title: "Could not create prospect", message: json.error ?? "Please review the details and try again." });
     window.location.reload();
   }
   async function createCampaign(form: HTMLFormElement) {
@@ -49,7 +50,7 @@ export function AcquisitionClient({ data, canWrite }: { data: AcquisitionDashboa
     for (const key of ["budgetAmount", "actualSpendAmount"]) if (typeof body[key] === "string") body[key] = Number(body[key]);
     const res = await fetch("/api/admin/acquisition/campaigns", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     setBusy(false);
-    if (!res.ok) return window.alert((await res.json()).error ?? "Could not create campaign");
+    if (!res.ok) return setNotice({ title: "Could not create campaign", message: (await res.json()).error ?? "Please review the details and try again." });
     window.location.reload();
   }
   async function discover(form: HTMLFormElement) {
@@ -58,18 +59,17 @@ export function AcquisitionClient({ data, canWrite }: { data: AcquisitionDashboa
     const res = await fetch("/api/admin/acquisition/discover", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const json = await res.json();
     setBusy(false);
-    if (!res.ok) return window.alert(json.error ?? "Web discovery could not run");
-    window.alert(`Found ${json.found} public listings. Added ${json.imported}; skipped ${json.skipped} duplicates.\n\n${json.message}`);
-    window.location.reload();
+    if (!res.ok) return setNotice({ title: "Business search could not run", message: json.error ?? "Please try again with a narrower city search." });
+    setShowDiscovery(false);
+    setNotice({ title: "Business search complete", message: `Found ${json.found} listings. Added ${json.imported}; skipped ${json.skipped} duplicates. ${json.message}`, reload: true });
   }
   async function qualifyNewProspects() {
     setBusy(true);
     const res = await fetch("/api/admin/acquisition/qualify", { method: "POST" });
     const json = await res.json();
     setBusy(false);
-    if (!res.ok) return window.alert(json.error ?? "AI qualification could not run");
-    window.alert(`AI reviewed ${json.qualified} of ${json.processed} new prospects. ${json.message}`);
-    window.location.reload();
+    if (!res.ok) return setNotice({ title: "AI review could not run", message: json.error ?? "Please try again." });
+    setNotice({ title: "AI review complete", message: `AI reviewed ${json.qualified} of ${json.processed} new prospects. ${json.message}`, reload: true });
   }
   return (
     <div className="p-5 md:p-8 max-w-7xl mx-auto space-y-7">
@@ -116,12 +116,14 @@ export function AcquisitionClient({ data, canWrite }: { data: AcquisitionDashboa
       {showCreate && <CreateModal data={data} busy={busy} close={() => setShowCreate(false)} submit={create} />}
       {showDiscovery && <DiscoveryModal busy={busy} close={() => setShowDiscovery(false)} submit={discover} />}
       {showCampaignCreate && <CampaignModal data={data} busy={busy} close={() => setShowCampaignCreate(false)} submit={createCampaign} />}
+      {notice && <NoticeModal title={notice.title} message={notice.message} close={() => { const reload = notice.reload; setNotice(null); if (reload) window.location.reload(); }} />}
     </div>
   );
 }
 function DiscoveryModal({ busy, close, submit }: { busy: boolean; close: () => void; submit: (form: HTMLFormElement) => void }) {
-  return <div className="fixed inset-0 z-50 bg-black/70 p-4 overflow-auto"><form onSubmit={(e) => { e.preventDefault(); submit(e.currentTarget); }} className="max-w-xl mx-auto my-8 bg-vodium-charcoal rounded-2xl border border-white/[0.1] p-6 space-y-4"><div className="flex justify-between gap-4"><div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-vodium-gold">Nigeria only · no paid API</p><h2 className="font-serif text-xl">Find public business listings</h2><p className="text-xs text-vodium-cream/45 mt-1">Searches free OpenStreetMap listings in Nigeria and adds unique businesses as identified prospects.</p></div><button type="button" onClick={close} className="rounded-md px-2 py-1 text-sm text-vodium-cream/50 transition-colors hover:bg-white/5 hover:text-vodium-cream focus:outline-none focus:ring-2 focus:ring-vodium-gold/50">Close</button></div><div className="grid md:grid-cols-2 gap-3"><div className="md:col-span-2"><Field name="query" label="Business search" required /><p className="text-[11px] text-vodium-cream/35 mt-1">Example: provision stores or campus laundry</p></div><Field name="city" label="Nigerian city (recommended)" /><Field name="state" label="Nigerian state (optional)" /><label className="text-xs text-vodium-cream/50">Listings to look for<select name="limit" defaultValue="50" className="input-dark w-full rounded-lg px-3 py-2 mt-1"><option value="50">50</option><option value="100">100</option><option value="250">250</option><option value="500">500</option></select></label></div><p className="rounded-lg border border-vodium-gold/20 bg-vodium-gold/5 p-3 text-xs text-vodium-cream/55">OpenStreetMap is free and community-maintained, so some businesses will not have a phone number or email. Only publicly listed details are imported; verify them before outreach or sending a claim link.</p><div className="flex justify-end gap-2 border-t border-white/[0.08] pt-4"><button type="button" onClick={close} disabled={busy} className="h-10 rounded-lg px-4 text-sm font-semibold text-vodium-cream/60 transition-colors hover:bg-white/5 hover:text-vodium-cream disabled:opacity-50">Cancel</button><button disabled={busy} className="btn-gold inline-flex h-10 items-center rounded-lg px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60">{busy ? "Searching Nigeria…" : "Find and add prospects"}</button></div></form></div>;
+  return <div className="fixed inset-0 z-50 bg-black/70 p-4 overflow-auto"><form onSubmit={(e) => { e.preventDefault(); submit(e.currentTarget); }} className="max-w-xl mx-auto my-8 bg-vodium-charcoal rounded-2xl border border-white/[0.1] p-6 space-y-4"><div className="flex justify-between gap-4"><div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-vodium-gold">Nigeria only · no paid API</p><h2 className="font-serif text-xl">Find public business listings</h2><p className="text-xs text-vodium-cream/45 mt-1">Searches free OpenStreetMap listings in Nigeria and adds unique businesses as identified prospects.</p></div><button type="button" onClick={close} className="rounded-md px-2 py-1 text-sm text-vodium-cream/50 transition-colors hover:bg-white/5 hover:text-vodium-cream focus:outline-none focus:ring-2 focus:ring-vodium-gold/50">Close</button></div><div className="grid md:grid-cols-2 gap-3"><div className="md:col-span-2"><Field name="query" label="Business search" required /><p className="text-[11px] text-vodium-cream/35 mt-1">Example: provision stores or campus laundry</p></div><Field name="city" label="Nigerian city" required /><Field name="state" label="Nigerian state (optional)" /><label className="text-xs text-vodium-cream/50">Listings to look for<select name="limit" defaultValue="50" className="input-dark w-full rounded-lg px-3 py-2 mt-1"><option value="50">50</option><option value="100">100</option><option value="250">250</option><option value="500">500</option></select></label></div><p className="rounded-lg border border-vodium-gold/20 bg-vodium-gold/5 p-3 text-xs text-vodium-cream/55">A city is required so the free search stays fast and reliable. Only publicly listed details are imported; verify them before outreach or sending a claim link.</p><div className="flex justify-end gap-2 border-t border-white/[0.08] pt-4"><button type="button" onClick={close} disabled={busy} className="h-10 rounded-lg px-4 text-sm font-semibold text-vodium-cream/60 transition-colors hover:bg-white/5 hover:text-vodium-cream disabled:opacity-50">Cancel</button><button disabled={busy} className="btn-gold inline-flex h-10 items-center rounded-lg px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60">{busy ? "Searching Nigeria…" : "Find and add prospects"}</button></div></form></div>;
 }
+function NoticeModal({ title, message, close }: { title: string; message: string; close: () => void }) { return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"><div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-white/[0.12] bg-vodium-charcoal p-6 shadow-2xl"><h2 className="font-serif text-xl text-vodium-cream">{title}</h2><p className="mt-3 text-sm leading-6 text-vodium-cream/65">{message}</p><div className="mt-6 flex justify-end"><button type="button" onClick={close} className="btn-gold inline-flex h-10 items-center rounded-lg px-4 text-sm font-semibold">Done</button></div></div></div>; }
 function CampaignModal({ data, busy, close, submit }: { data: AcquisitionDashboardData; busy: boolean; close: () => void; submit: (form: HTMLFormElement) => void }) {
   return <div className="fixed inset-0 z-50 bg-black/70 p-4 overflow-auto"><form onSubmit={(e) => { e.preventDefault(); submit(e.currentTarget); }} className="max-w-xl mx-auto my-8 bg-vodium-charcoal rounded-2xl border border-white/[0.1] p-6 space-y-4"><div className="flex justify-between"><h2 className="font-serif text-xl">New acquisition campaign</h2><button type="button" onClick={close} className="text-vodium-cream/50">Close</button></div><div className="grid md:grid-cols-2 gap-3"><Field name="name" label="Campaign name" required /><Select name="source" label="Primary source" values={sourceValues} labels={SOURCE_LABEL} required /><Select name="ownerAdminId" label="Owner" values={data.admins.map((a) => a.id)} labels={Object.fromEntries(data.admins.map((a) => [a.id, a.name]))} /><Select name="status" label="Status" values={["DRAFT", "ACTIVE", "PAUSED", "COMPLETED"]} /><Field name="budgetAmount" label="Budget (₦)" type="number" /><label className="text-xs text-vodium-cream/50">Start date<input name="startAt" type="datetime-local" className="input-dark w-full rounded-lg px-3 py-2 mt-1" /></label></div><label className="text-xs text-vodium-cream/50 block">Notes<textarea name="notes" className="input-dark w-full rounded-lg px-3 py-2 mt-1 min-h-20" /></label><button disabled={busy} className="btn-gold rounded-lg px-4 py-2 text-sm">{busy ? "Saving…" : "Create campaign"}</button></form></div>;
 }

@@ -9,7 +9,7 @@ import { ipFromRequest, writeAudit } from "@/lib/audit";
 
 const schema = z.object({
   query: z.string().trim().min(3).max(180),
-  city: z.string().trim().max(80).optional().nullable(),
+  city: z.string().trim().min(2).max(80),
   state: z.string().trim().max(80).optional().nullable(),
   limit: z.coerce.number().int().min(50).max(500),
 });

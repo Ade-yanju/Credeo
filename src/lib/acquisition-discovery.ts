@@ -11,6 +11,7 @@ export type DiscoveredBusiness = {
 };
 
 type OsmElement = { type: "node" | "way" | "relation"; id: number; tags?: Record<string, string> };
+type GeocodeResult = { boundingbox?: [string, string, string, string] };
 
 function terms(query: string) {
   const stop = new Set(["and", "the", "near", "with", "for", "in", "at", "of", "to", "business", "businesses", "shops", "shop"]);
@@ -31,22 +32,42 @@ export async function discoverBusinesses(input: {
   const keywords = terms(input.query);
   if (!keywords.length) throw new Error("Use a more specific business search, for example ‘provision stores’ or ‘campus laundry’.");
   const pattern = keywords.map(regex).join("|");
-  const cities = [input.city, input.state].filter(Boolean).map((value) => regex(value!.trim())).join("|");
-  const locality = cities ? `["addr:city"~"${cities}",i]` : "";
+  const city = input.city?.trim();
+  if (!city) throw new Error("Choose a Nigerian city before searching. This keeps the free public search fast and reliable.");
+  const geocodeUrl = new URL("https://nominatim.openstreetmap.org/search");
+  geocodeUrl.searchParams.set("format", "jsonv2"); geocodeUrl.searchParams.set("limit", "1");
+  geocodeUrl.searchParams.set("q", `${city}${input.state ? `, ${input.state}` : ""}, Nigeria`);
+  let geocode: Response;
+  try {
+    geocode = await fetch(geocodeUrl, { headers: { "User-Agent": "VodiumLedger/1.0 merchant-discovery" }, cache: "no-store", signal: AbortSignal.timeout(12_000) });
+  } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) throw new Error("The free map service took too long to locate that city. Please try again shortly.");
+    throw new Error("The free map service could not locate that city. Please try again shortly.");
+  }
+  const locations = geocode.ok ? await geocode.json() as GeocodeResult[] : [];
+  const bounds = locations[0]?.boundingbox;
+  if (!bounds) throw new Error("That Nigerian city could not be located. Check the spelling and try again.");
+  const [south, north, west, east] = bounds;
+  const bbox = `(${south},${west},${north},${east})`;
   const limit = Math.min(input.limit, 500);
-  const data = `[out:json][timeout:45];
-area["ISO3166-1"="NG"][admin_level=2]->.nigeria;
+  const data = `[out:json][timeout:20];
 (
-  nwr(area.nigeria)[name~"${pattern}",i]${locality};
-  nwr(area.nigeria)["shop"][name~"${pattern}",i]${locality};
-  nwr(area.nigeria)[amenity][name~"${pattern}",i]${locality};
-  nwr(area.nigeria)[craft][name~"${pattern}",i]${locality};
+  nwr${bbox}[name~"${pattern}",i];
+  nwr${bbox}["shop"][name~"${pattern}",i];
+  nwr${bbox}[amenity][name~"${pattern}",i];
+  nwr${bbox}[craft][name~"${pattern}",i];
 );
 out tags ${limit};`;
-  const response = await fetch("https://overpass-api.de/api/interpreter", {
-    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "VodiumLedger/1.0 merchant-discovery" },
-    body: new URLSearchParams({ data }), cache: "no-store", signal: AbortSignal.timeout(55_000),
-  });
+  let response: Response;
+  try {
+    response = await fetch("https://overpass-api.de/api/interpreter", {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "VodiumLedger/1.0 merchant-discovery" },
+      body: new URLSearchParams({ data }), cache: "no-store", signal: AbortSignal.timeout(30_000),
+    });
+  } catch (error) {
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) throw new Error("The free map search took too long. Try 50 listings or a more specific business category.");
+    throw new Error("The free map search could not be reached. Please try again shortly.");
+  }
   if (!response.ok) {
     if (response.status === 429 || response.status === 504) throw new Error("The free OpenStreetMap search service is busy. Please wait a minute and try a narrower city or business search.");
     throw new Error(`The OpenStreetMap search service is unavailable (HTTP ${response.status}). Please try again.`);
