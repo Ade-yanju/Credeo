@@ -55,6 +55,61 @@ function numberFrom(value: unknown, fallback = 0): number {
   return fallback;
 }
 
+/**
+ * Classify a public business listing for acquisition. This is advisory only:
+ * it never contacts a prospect, creates an account, or changes pipeline stage.
+ */
+export async function assessAcquisitionProspect(input: {
+  businessName: string;
+  locationText?: string | null;
+  city?: string | null;
+  state?: string | null;
+  sourceDetail?: string | null;
+}): Promise<null | {
+  vendorType: "PROVISION_SHOP" | "FOOD_CANTEEN" | "LAUNDRY" | "PRINTING" | "BARBING_SALON" | "HAIR_SALON" | "PHARMACY" | "MINI_MART" | "OTHER";
+  fit: "HIGH" | "MEDIUM" | "LOW" | "UNQUALIFIED";
+  priority: "LOW" | "NORMAL" | "HIGH";
+  reasons: string[];
+  suggestedNextAction: string;
+}> {
+  if (!enabled()) return null;
+  const schema = {
+    type: "object" as const,
+    properties: {
+      vendorType: { type: "string" as const, enum: ["PROVISION_SHOP", "FOOD_CANTEEN", "LAUNDRY", "PRINTING", "BARBING_SALON", "HAIR_SALON", "PHARMACY", "MINI_MART", "OTHER"] },
+      fit: { type: "string" as const, enum: ["HIGH", "MEDIUM", "LOW", "UNQUALIFIED"] },
+      priority: { type: "string" as const, enum: ["LOW", "NORMAL", "HIGH"] },
+      reasons: { type: "array" as const, items: { type: "string" as const } },
+      suggestedNextAction: { type: "string" as const },
+    },
+    required: ["vendorType", "fit", "priority", "reasons", "suggestedNextAction"],
+    additionalProperties: false as const,
+  };
+  try {
+    const response = await client.messages.parse({
+      model: CHEAP_MODEL, max_tokens: 500,
+      system: "You qualify public Nigerian business listings for Vodium Ledger, a ledger and credit-management product for small merchants. Be conservative: only use supplied facts; do not infer private facts or contact details. This is an advisory score for staff review, not permission to contact or create accounts.",
+      messages: [{ role: "user", content: JSON.stringify(input) }],
+      output_config: { format: { type: "json_schema", schema } },
+    });
+    const text = response.content.find((block) => block.type === "text")?.text;
+    const parsed = text ? extractJson<unknown>(text, null) : null;
+    if (!assertObject(parsed) || !Array.isArray(parsed.reasons)) return null;
+    const vendorTypes = ["PROVISION_SHOP", "FOOD_CANTEEN", "LAUNDRY", "PRINTING", "BARBING_SALON", "HAIR_SALON", "PHARMACY", "MINI_MART", "OTHER"] as const;
+    const fits = ["HIGH", "MEDIUM", "LOW", "UNQUALIFIED"] as const;
+    const priorities = ["LOW", "NORMAL", "HIGH"] as const;
+    if (!vendorTypes.includes(parsed.vendorType as typeof vendorTypes[number]) || !fits.includes(parsed.fit as typeof fits[number]) || !priorities.includes(parsed.priority as typeof priorities[number])) return null;
+    return {
+      vendorType: parsed.vendorType as typeof vendorTypes[number], fit: parsed.fit as typeof fits[number], priority: parsed.priority as typeof priorities[number],
+      reasons: parsed.reasons.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean).slice(0, 3),
+      suggestedNextAction: typeof parsed.suggestedNextAction === "string" ? parsed.suggestedNextAction.trim().slice(0, 300) : "Review listing and verify contact details.",
+    };
+  } catch (err) {
+    console.warn("[ai] assessAcquisitionProspect failed:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Structured extraction — with zod schemas for parse()               */
 /* ------------------------------------------------------------------ */

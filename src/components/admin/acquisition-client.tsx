@@ -62,11 +62,20 @@ export function AcquisitionClient({ data, canWrite }: { data: AcquisitionDashboa
     window.alert(`Found ${json.found} public listings. Added ${json.imported}; skipped ${json.skipped} duplicates.\n\n${json.message}`);
     window.location.reload();
   }
+  async function qualifyNewProspects() {
+    setBusy(true);
+    const res = await fetch("/api/admin/acquisition/qualify", { method: "POST" });
+    const json = await res.json();
+    setBusy(false);
+    if (!res.ok) return window.alert(json.error ?? "AI qualification could not run");
+    window.alert(`AI reviewed ${json.qualified} of ${json.processed} new prospects. ${json.message}`);
+    window.location.reload();
+  }
   return (
     <div className="p-5 md:p-8 max-w-7xl mx-auto space-y-7">
       <div className="flex items-start justify-between gap-4">
         <div><p className="text-xs uppercase tracking-[0.2em] text-vodium-gold">Merchant acquisition</p><h1 className="font-serif text-2xl md:text-3xl text-vodium-cream mt-1">Prospects and conversion</h1><p className="text-sm text-vodium-cream/45 mt-1">A focused operating queue for turning merchant leads into active Vodium vendors.</p></div>
-        {canWrite && <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={() => setShowDiscovery(true)} className="inline-flex h-10 items-center justify-center rounded-lg border border-vodium-gold/45 px-4 text-sm font-semibold text-vodium-gold transition-colors hover:bg-vodium-gold/10 focus:outline-none focus:ring-2 focus:ring-vodium-gold/50"><Search size={16} className="mr-2" /> Find Nigerian businesses</button><button type="button" onClick={() => setShowCreate(true)} className="btn-gold inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold shadow-sm transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-vodium-gold/60"><Plus size={16} className="mr-2" /> Add prospect</button></div>}
+        {canWrite && <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={qualifyNewProspects} disabled={busy} className="inline-flex h-10 items-center justify-center rounded-lg border border-sky-400/40 px-4 text-sm font-semibold text-sky-300 transition-colors hover:bg-sky-400/10 disabled:opacity-50"><Target size={16} className="mr-2" /> {busy ? "Reviewing…" : "AI review new leads"}</button><button type="button" onClick={() => setShowDiscovery(true)} className="inline-flex h-10 items-center justify-center rounded-lg border border-vodium-gold/45 px-4 text-sm font-semibold text-vodium-gold transition-colors hover:bg-vodium-gold/10 focus:outline-none focus:ring-2 focus:ring-vodium-gold/50"><Search size={16} className="mr-2" /> Find Nigerian businesses</button><button type="button" onClick={() => setShowCreate(true)} className="btn-gold inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold shadow-sm transition-transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-vodium-gold/60"><Plus size={16} className="mr-2" /> Add prospect</button></div>}
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
