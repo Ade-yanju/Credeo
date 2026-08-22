@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
         data: {
           ...business,
           phone,
-          source: "GOOGLE_BUSINESS",
+          source: "OTHER",
           stage: "IDENTIFIED",
           fit: "MEDIUM",
           priority: "NORMAL",
@@ -52,7 +52,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ found: businesses.length, imported, skipped, message: "Public listings were added as identified prospects. Email is only stored when a configured source provides it; it is never guessed." });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Web discovery failed";
-    const status = /rejected by SerpApi/.test(message) ? 401 : 502;
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }
