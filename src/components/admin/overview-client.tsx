@@ -15,16 +15,14 @@ const SEVERITY = {
   info:     { ring: "border-white/[0.1] bg-white/[0.03]",       text: "text-vodium-cream/60" },
 } as const;
 
-export function OverviewClient({ data }: { data: OverviewData }) {
+export function OverviewClient({ data, canViewFinance }: { data: OverviewData; canViewFinance: boolean }) {
   const k = data.kpi;
 
   return (
     <div className="space-y-6">
       {/* Headline */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile hero label="Tracked to date" value={formatNaira(k.tracked)} sub={`${k.totalCredits.toLocaleString()} credits logged`} />
-        <StatTile hero label="Recovered" value={formatNaira(k.recovered)} sub={`${k.recoveryRate}% of value extended`} tone={k.recoveryRate >= 70 ? "good" : "warning"} />
-        <StatTile hero label="MRR" value={formatNaira(k.mrr)} sub="Active subscriptions" />
+      <div className={`grid grid-cols-2 ${canViewFinance ? "lg:grid-cols-4" : "lg:grid-cols-2"} gap-3`}>
+        {canViewFinance && <><StatTile hero label="Tracked to date" value={formatNaira(k.tracked)} sub={`${k.totalCredits.toLocaleString()} credits logged`} /><StatTile hero label="Recovered" value={formatNaira(k.recovered)} sub={`${k.recoveryRate}% of value extended`} tone={k.recoveryRate >= 70 ? "good" : "warning"} /><StatTile hero label="MRR" value={formatNaira(k.mrr)} sub="Active subscriptions" /></>}
         <StatTile hero label="Vendors" value={String(k.totalVendors)} sub={`${k.activeVendors} active · ${k.totalCustomers.toLocaleString()} customers`} />
       </div>
 
@@ -63,11 +61,9 @@ export function OverviewClient({ data }: { data: OverviewData }) {
       {/* Momentum */}
       <section>
         <SectionHeading title="Momentum" sub="Is the platform being used more this week than last?" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div className={`grid grid-cols-2 ${canViewFinance ? "lg:grid-cols-4" : "lg:grid-cols-1"} gap-3 mb-4`}>
           <WeekTile count={k.creditsThisWeek} change={k.wowChange} />
-          <StatTile label="Still owed" value={formatNaira(k.outstanding)} sub="Extended minus recovered" tone="warning" />
-          <StatTile label="Default rate" value={`${k.defaultRate}%`} sub="Written off" tone={k.defaultRate <= 5 ? "good" : "critical"} />
-          <StatTile label="Overdue credits" value={String(k.overdueCredits)} sub="Past due, unpaid" tone={k.overdueCredits === 0 ? "good" : "warning"} />
+          {canViewFinance && <><StatTile label="Still owed" value={formatNaira(k.outstanding)} sub="Extended minus recovered" tone="warning" /><StatTile label="Default rate" value={`${k.defaultRate}%`} sub="Written off" tone={k.defaultRate <= 5 ? "good" : "critical"} /><StatTile label="Overdue credits" value={String(k.overdueCredits)} sub="Past due, unpaid" tone={k.overdueCredits === 0 ? "good" : "warning"} /></>}
         </div>
 
         <div className="grid lg:grid-cols-2 gap-4">
@@ -147,12 +143,16 @@ export function OverviewClient({ data }: { data: OverviewData }) {
       <section>
         <SectionHeading title="Jump to" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
+          {(canViewFinance ? [
             { href: "/admin/vendors",   label: "Vendors",   icon: Store,   sub: `${data.kpi.totalVendors} registered` },
             { href: "/admin/finance",   label: "Finance",   icon: Banknote, sub: formatNaira(data.kpi.mrr) + " MRR" },
             { href: "/admin/analytics", label: "Analytics", icon: Activity, sub: "Logging & repayment" },
             { href: "/admin/disputes",  label: "Disputes",  icon: AlertTriangle, sub: `${data.kpi.openDisputes} open` },
-          ].map((l) => {
+          ] : [
+            { href: "/admin/vendors", label: "Vendors", icon: Store, sub: `${data.kpi.totalVendors} registered` },
+            { href: "/admin/analytics", label: "Analytics", icon: Activity, sub: "Logging & repayment" },
+            { href: "/admin/disputes", label: "Disputes", icon: AlertTriangle, sub: `${data.kpi.openDisputes} open` },
+          ]).map((l) => {
             const Icon = l.icon;
             return (
               <Link key={l.href} href={l.href}

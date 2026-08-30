@@ -6,6 +6,7 @@ import { ACQUISITION_OPERATORS } from "@/lib/acquisition";
 import { discoverBusinesses } from "@/lib/acquisition-discovery";
 import { normalisePhone } from "@/lib/utils";
 import { ipFromRequest, writeAudit } from "@/lib/audit";
+import { findPublicEmail } from "@/lib/acquisition-email";
 
 const schema = z.object({
   query: z.string().trim().min(3).max(180),
@@ -22,7 +23,14 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid discovery request" }, { status: 400 });
 
   try {
-    const businesses = await discoverBusinesses(parsed.data);
+    const discovered = await discoverBusinesses(parsed.data);
+    // Enrich in small batches so one slow website cannot create an unbounded
+    // burst of outbound requests in a production function.
+    const businesses: Array<(typeof discovered)[number] & { email: string | null }> = [];
+    for (let index = 0; index < discovered.length; index += 10) {
+      const batch = discovered.slice(index, index + 10);
+      businesses.push(...await Promise.all(batch.map(async (business) => ({ ...business, email: await findPublicEmail(business.sourceDetail) }))));
+    }
     let imported = 0;
     let skipped = 0;
     for (const business of businesses) {

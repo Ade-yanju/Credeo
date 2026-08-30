@@ -17,7 +17,7 @@ export interface AttentionItem {
   severity: "critical" | "warning" | "info";
 }
 
-export async function getOverview() {
+export async function getOverview({ includeFinance = true }: { includeFinance?: boolean } = {}) {
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
@@ -117,15 +117,18 @@ export async function getOverview() {
 
   return {
     kpi: {
-      totalVendors, activeVendors, totalCustomers, mrr,
-      tracked, recovered,
-      outstanding: Math.max(tracked - recovered, 0),
-      recoveryRate: tracked > 0 ? Math.round((recovered / tracked) * 100) : 0,
+      totalVendors, activeVendors, totalCustomers,
+      mrr: includeFinance ? mrr : 0,
+      tracked: includeFinance ? tracked : 0,
+      recovered: includeFinance ? recovered : 0,
+      outstanding: includeFinance ? Math.max(tracked - recovered, 0) : 0,
+      recoveryRate: includeFinance && tracked > 0 ? Math.round((recovered / tracked) * 100) : 0,
       totalCredits, creditsThisWeek, wowChange,
-      defaultRate: totalCredits > 0 ? Math.round((writtenOff / totalCredits) * 100) : 0,
-      openDisputes, pastDueSubs, expiringTrials, overdueCredits,
+      defaultRate: includeFinance && totalCredits > 0 ? Math.round((writtenOff / totalCredits) * 100) : 0,
+      openDisputes, pastDueSubs: includeFinance ? pastDueSubs : 0, expiringTrials: includeFinance ? expiringTrials : 0,
+      overdueCredits: includeFinance ? overdueCredits : 0,
     },
-    attention,
+    attention: includeFinance ? attention : attention.filter((item) => item.id !== "pastdue" && item.id !== "trials"),
     signupTrend,
     communities: communities.map((c) => ({
       name: c.shortName ?? c.name,

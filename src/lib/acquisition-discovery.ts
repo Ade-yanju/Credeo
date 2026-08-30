@@ -93,7 +93,9 @@ export async function discoverBusinesses(input: {
     seen.add(identity);
     const locationText = place.formattedAddress?.trim() || null;
     const website = place.websiteUri ? `Website: ${place.websiteUri}` : null;
-    const sourceDetail = [`Google Business Profile`, place.id ? `Place ID: ${place.id}` : null, website, place.googleMapsUri].filter(Boolean).join(" · ").slice(0, 300);
+    // Keep the website first so the email-enrichment job can reliably use it
+    // even when Google returns a long map URL and sourceDetail is truncated.
+    const sourceDetail = [website, `Google Business Profile`, place.id ? `Place ID: ${place.id}` : null, place.googleMapsUri].filter(Boolean).join(" · ").slice(0, 300);
     return [{
       businessName,
       contactName: null,

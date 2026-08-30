@@ -17,7 +17,8 @@
     "db:deploy": "node --env-file=.env.local node_modules/.bin/prisma migrate deploy",
     "db:studio": "node --env-file=.env.local node_modules/.bin/prisma studio",
     "db:reset": "node --env-file=.env.local node_modules/.bin/prisma migrate reset",
-    "seed": "node --env-file=.env.local node_modules/.bin/tsx scripts/seed.ts"
+    "seed": "node --env-file=.env.local node_modules/.bin/tsx scripts/seed.ts",
+    "acquisition:enrich-emails": "node --env-file=.env.local node_modules/.bin/tsx scripts/enrich-acquisition-emails.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

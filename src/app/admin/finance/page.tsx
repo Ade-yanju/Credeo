@@ -1,9 +1,13 @@
+import { redirect } from "next/navigation";
 import { getFinance } from "@/lib/admin/finance";
 import { FinanceClient } from "@/components/admin/finance-client";
+import { getAdminSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminFinancePage() {
+  const session = getAdminSession();
+  if (!session || (session.role !== "SUPER_ADMIN" && session.role !== "CFO")) redirect("/admin");
   const data = await getFinance();
 
   return (

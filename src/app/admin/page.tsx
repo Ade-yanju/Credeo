@@ -1,10 +1,13 @@
 import { getOverview } from "@/lib/admin/overview";
 import { OverviewClient } from "@/components/admin/overview-client";
+import { getAdminSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  const data = await getOverview();
+  const session = getAdminSession();
+  const canViewFinance = session?.role === "SUPER_ADMIN" || session?.role === "CFO";
+  const data = await getOverview({ includeFinance: canViewFinance });
 
   return (
     <div className="p-5 md:p-8 max-w-7xl mx-auto space-y-6">
@@ -16,7 +19,7 @@ export default async function AdminPage() {
         </p>
       </div>
 
-      <OverviewClient data={data} />
+      <OverviewClient data={data} canViewFinance={canViewFinance} />
     </div>
   );
 }
