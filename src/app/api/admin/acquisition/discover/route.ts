@@ -11,7 +11,7 @@ const schema = z.object({
   query: z.string().trim().min(3).max(180),
   city: z.string().trim().min(2).max(80),
   state: z.string().trim().max(80).optional().nullable(),
-  limit: z.coerce.number().int().min(50).max(500),
+  limit: z.coerce.number().int().min(10).max(60),
 });
 
 export async function POST(req: NextRequest) {
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
         data: {
           ...business,
           phone,
-          source: "OTHER",
+          source: "GOOGLE_BUSINESS",
           stage: "IDENTIFIED",
           fit: "MEDIUM",
           priority: "NORMAL",
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       imported += 1;
     }
     void writeAudit({ actorType: "admin", actorId: session.id, action: "acquisition.web_discovery", entityType: "AcquisitionProspect", entityId: null, ipAddress: ipFromRequest(req), metadata: { query: parsed.data.query, requested: parsed.data.limit, found: businesses.length, imported, skipped } });
-    return NextResponse.json({ found: businesses.length, imported, skipped, message: "Public listings were added as identified prospects. Email is only stored when a configured source provides it; it is never guessed." });
+    return NextResponse.json({ found: businesses.length, imported, skipped, message: "Google listings were added as identified prospects. Google Places provides public phone numbers and websites, but not business email addresses; emails are never guessed." });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Web discovery failed";
     return NextResponse.json({ error: message }, { status: 502 });

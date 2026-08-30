@@ -1,26 +1,36 @@
-/** Free Nigeria-only business discovery using OpenStreetMap's public Overpass API. */
+/** Google Places (New) business discovery for merchant acquisition. */
 export type DiscoveredBusiness = {
   businessName: string;
   contactName: null;
   phone: string | null;
-  email: string | null;
+  email: null;
   locationText: string | null;
   city: string | null;
   state: string | null;
   sourceDetail: string;
 };
 
-type OsmElement = { type: "node" | "way" | "relation"; id: number; tags?: Record<string, string> };
-type GeocodeResult = { boundingbox?: [string, string, string, string] };
+type GoogleAddressComponent = { longText?: string; types?: string[] };
+type GooglePlace = {
+  id?: string;
+  displayName?: { text?: string };
+  formattedAddress?: string;
+  addressComponents?: GoogleAddressComponent[];
+  internationalPhoneNumber?: string;
+  nationalPhoneNumber?: string;
+  websiteUri?: string;
+  googleMapsUri?: string;
+};
 
-function terms(query: string) {
-  const stop = new Set(["and", "the", "near", "with", "for", "in", "at", "of", "to", "business", "businesses", "shops", "shop"]);
-  return query.toLowerCase().match(/[a-z0-9]{3,}/g)?.filter((term) => !stop.has(term)).slice(0, 5) ?? [];
+function addressComponent(place: GooglePlace, type: string) {
+  return place.addressComponents?.find((component) => component.types?.includes(type))?.longText ?? null;
 }
-function regex(value: string) { return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&"); }
-function address(tags: Record<string, string>) {
-  const street = [tags["addr:housenumber"], tags["addr:street"]].filter(Boolean).join(" ");
-  return [street, tags["addr:suburb"], tags["addr:city"], tags["addr:state"]].filter(Boolean).join(", ") || null;
+
+function googleError(payload: unknown, status: number) {
+  const message = (payload as { error?: { message?: string } })?.error?.message;
+  if (status === 403) return "Google Places rejected the request. Check that the Places API (New) is enabled and the API key is valid.";
+  if (status === 429) return "Google Places is temporarily rate-limiting searches. Please wait and try again.";
+  return message ? `Google Places search failed: ${message}` : `Google Places search failed (HTTP ${status}).`;
 }
 
 export async function discoverBusinesses(input: {
@@ -29,60 +39,70 @@ export async function discoverBusinesses(input: {
   state?: string | null;
   limit: number;
 }): Promise<DiscoveredBusiness[]> {
-  const keywords = terms(input.query);
-  if (!keywords.length) throw new Error("Use a more specific business search, for example ‘provision stores’ or ‘campus laundry’.");
-  const pattern = keywords.map(regex).join("|");
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY?.trim();
+  if (!apiKey) throw new Error("Google Places is not configured. Add GOOGLE_MAPS_API_KEY to the server environment.");
   const city = input.city?.trim();
-  if (!city) throw new Error("Choose a Nigerian city before searching. This keeps the free public search fast and reliable.");
-  const geocodeUrl = new URL("https://nominatim.openstreetmap.org/search");
-  geocodeUrl.searchParams.set("format", "jsonv2"); geocodeUrl.searchParams.set("limit", "1");
-  geocodeUrl.searchParams.set("q", `${city}${input.state ? `, ${input.state}` : ""}, Nigeria`);
-  let geocode: Response;
-  try {
-    geocode = await fetch(geocodeUrl, { headers: { "User-Agent": "VodiumLedger/1.0 merchant-discovery" }, cache: "no-store", signal: AbortSignal.timeout(12_000) });
-  } catch (error) {
-    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) throw new Error("The free map service took too long to locate that city. Please try again shortly.");
-    throw new Error("The free map service could not locate that city. Please try again shortly.");
+  if (!city) throw new Error("Choose a Nigerian city before searching.");
+
+  const limit = Math.min(Math.max(input.limit, 1), 60);
+  const textQuery = `${input.query.trim()} in ${city}${input.state?.trim() ? `, ${input.state.trim()}` : ""}, Nigeria`;
+  const fieldMask = [
+    "places.id", "places.displayName", "places.formattedAddress", "places.addressComponents",
+    "places.googleMapsUri", "places.internationalPhoneNumber", "places.nationalPhoneNumber", "places.websiteUri",
+    "nextPageToken",
+  ].join(",");
+  const places: GooglePlace[] = [];
+  let pageToken: string | undefined;
+
+  for (let page = 0; page < 3 && places.length < limit; page += 1) {
+    const body: Record<string, unknown> = {
+      textQuery,
+      pageSize: Math.min(20, limit - places.length),
+      regionCode: "NG",
+      languageCode: "en",
+    };
+    if (pageToken) body.pageToken = pageToken;
+    let response: Response;
+    try {
+      response = await fetch("https://places.googleapis.com/v1/places:searchText", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Goog-Api-Key": apiKey, "X-Goog-FieldMask": fieldMask },
+        body: JSON.stringify(body),
+        cache: "no-store",
+        signal: AbortSignal.timeout(20_000),
+      });
+    } catch (error) {
+      if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+        throw new Error("Google Places took too long to respond. Try a narrower business search.");
+      }
+      throw new Error("Google Places could not be reached. Please try again shortly.");
+    }
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(googleError(payload, response.status));
+    places.push(...((payload as { places?: GooglePlace[] }).places ?? []));
+    pageToken = (payload as { nextPageToken?: string }).nextPageToken;
+    if (!pageToken) break;
   }
-  const locations = geocode.ok ? await geocode.json() as GeocodeResult[] : [];
-  const bounds = locations[0]?.boundingbox;
-  if (!bounds) throw new Error("That Nigerian city could not be located. Check the spelling and try again.");
-  const [south, north, west, east] = bounds;
-  const bbox = `(${south},${west},${north},${east})`;
-  const limit = Math.min(input.limit, 500);
-  const data = `[out:json][timeout:20];
-(
-  nwr${bbox}[name~"${pattern}",i];
-  nwr${bbox}["shop"][name~"${pattern}",i];
-  nwr${bbox}[amenity][name~"${pattern}",i];
-  nwr${bbox}[craft][name~"${pattern}",i];
-);
-out tags ${limit};`;
-  let response: Response;
-  try {
-    response = await fetch("https://overpass-api.de/api/interpreter", {
-      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "VodiumLedger/1.0 merchant-discovery" },
-      body: new URLSearchParams({ data }), cache: "no-store", signal: AbortSignal.timeout(30_000),
-    });
-  } catch (error) {
-    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) throw new Error("The free map search took too long. Try 50 listings or a more specific business category.");
-    throw new Error("The free map search could not be reached. Please try again shortly.");
-  }
-  if (!response.ok) {
-    if (response.status === 429 || response.status === 504) throw new Error("The free OpenStreetMap search service is busy. Please wait a minute and try a narrower city or business search.");
-    throw new Error(`The OpenStreetMap search service is unavailable (HTTP ${response.status}). Please try again.`);
-  }
-  const payload = await response.json() as { elements?: OsmElement[]; remark?: string };
-  if (payload.remark) throw new Error("The OpenStreetMap search could not complete. Try a narrower city or business search.");
+
   const seen = new Set<string>();
-  return (payload.elements ?? []).flatMap((element) => {
-    const tags = element.tags ?? {}; const businessName = tags.name?.trim();
+  return places.flatMap((place) => {
+    const businessName = place.displayName?.text?.trim();
     if (!businessName) return [];
-    const phone = tags["contact:phone"] ?? tags.phone ?? null;
-    const email = tags["contact:email"] ?? tags.email ?? null;
-    const locationText = address(tags);
-    const identity = `${businessName.toLowerCase()}|${phone?.replace(/\D/g, "") ?? ""}|${locationText?.toLowerCase() ?? element.id}`;
-    if (seen.has(identity)) return []; seen.add(identity);
-    return [{ businessName, contactName: null, phone, email, locationText, city: tags["addr:city"] ?? input.city?.trim() ?? null, state: tags["addr:state"] ?? input.state?.trim() ?? null, sourceDetail: `OpenStreetMap Nigeria listing (${element.type}/${element.id})` }];
+    const identity = place.id ?? `${businessName.toLowerCase()}|${place.formattedAddress?.toLowerCase() ?? ""}`;
+    if (seen.has(identity)) return [];
+    seen.add(identity);
+    const locationText = place.formattedAddress?.trim() || null;
+    const website = place.websiteUri ? `Website: ${place.websiteUri}` : null;
+    const sourceDetail = [`Google Business Profile`, place.id ? `Place ID: ${place.id}` : null, website, place.googleMapsUri].filter(Boolean).join(" · ").slice(0, 300);
+    return [{
+      businessName,
+      contactName: null,
+      phone: place.internationalPhoneNumber ?? place.nationalPhoneNumber ?? null,
+      email: null,
+      locationText,
+      city: addressComponent(place, "locality") ?? addressComponent(place, "postal_town") ?? city,
+      state: addressComponent(place, "administrative_area_level_1") ?? input.state?.trim() ?? null,
+      sourceDetail,
+    }];
   }).slice(0, limit);
 }
