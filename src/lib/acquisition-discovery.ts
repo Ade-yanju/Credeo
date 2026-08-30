@@ -3,7 +3,7 @@ export type DiscoveredBusiness = {
   businessName: string;
   contactName: null;
   phone: string | null;
-  email: null;
+  email: string | null;
   locationText: string | null;
   city: string | null;
   state: string | null;
