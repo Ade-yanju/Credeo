@@ -12,8 +12,8 @@ export default async function AcquisitionDetailPage({ params }: { params: { id: 
       activities: { include: { createdBy: { select: { name: true } } }, orderBy: { occurredAt: "desc" } },
     } }),
     Promise.resolve(getAdminSession()),
-    prisma.adminUser.findMany({ where: { activatedAt: { not: null }, role: { in: ["SUPER_ADMIN", "MARKETING"] } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.adminUser.findMany({ where: { activatedAt: { not: null }, role: { in: ["SUPER_ADMIN", "MARKETING", "CUSTOMER_CARE"] } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   if (!prospect) notFound();
-  return <AcquisitionDetailClient prospect={JSON.parse(JSON.stringify(prospect))} admins={admins} canWrite={session?.role === "SUPER_ADMIN" || session?.role === "MARKETING"} />;
+  return <AcquisitionDetailClient prospect={JSON.parse(JSON.stringify(prospect))} admins={admins} canWrite={session?.role === "SUPER_ADMIN" || session?.role === "MARKETING" || session?.role === "CUSTOMER_CARE"} />;
 }

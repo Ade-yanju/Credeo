@@ -2,8 +2,10 @@ import crypto from "crypto";
 import type { AcquisitionStage } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
-export const ACQUISITION_OPERATORS = ["SUPER_ADMIN", "MARKETING"] as const;
-export const ACQUISITION_READERS = ["SUPER_ADMIN", "MARKETING", "ANALYTICS", "CFO"] as const;
+// Customer care handles merchant outreach and follow-up, so it can work the
+// acquisition queue while finance and analytics remain read-only.
+export const ACQUISITION_OPERATORS = ["SUPER_ADMIN", "MARKETING", "CUSTOMER_CARE"] as const;
+export const ACQUISITION_READERS = ["SUPER_ADMIN", "MARKETING", "CUSTOMER_CARE", "ANALYTICS", "CFO"] as const;
 export const TERMINAL_ACQUISITION_STAGES = ["LOST", "UNQUALIFIED", "WON"] as const;
 export const ACTIVE_ACQUISITION_STAGES = [
   "IDENTIFIED", "CONTACTED", "RESPONDED", "QUALIFIED", "DEMO_SCHEDULED",

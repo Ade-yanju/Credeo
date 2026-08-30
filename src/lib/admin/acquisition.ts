@@ -21,7 +21,7 @@ export async function getAcquisitionDashboard() {
     prisma.acquisitionCampaign.findMany({ include: { _count: { select: { prospects: true } } }, orderBy: { createdAt: "desc" } }),
     prisma.community.findMany({ select: { id: true, name: true, shortName: true }, orderBy: { name: "asc" } }),
     prisma.ambassador.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true, code: true }, orderBy: { name: "asc" } }),
-    prisma.adminUser.findMany({ where: { activatedAt: { not: null }, role: { in: ["SUPER_ADMIN", "MARKETING"] } }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }),
+    prisma.adminUser.findMany({ where: { activatedAt: { not: null }, role: { in: ["SUPER_ADMIN", "MARKETING", "CUSTOMER_CARE"] } }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }),
   ]);
   const active = prospects.filter((p) => (ACTIVE_ACQUISITION_STAGES as readonly string[]).includes(p.stage));
   const queue = {

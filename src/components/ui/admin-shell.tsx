@@ -73,6 +73,7 @@ const NAV_BY_ROLE: Record<
     { href: "/admin/support", icon: Headphones, label: "Support" },
     { href: "/admin/disputes", icon: ShieldAlert, label: "Disputes" },
     { href: "/admin/vendors", icon: Store, label: "Vendors" },
+    { href: "/admin/acquisition", icon: Target, label: "Acquisition" },
   ],
   ANALYTICS: [
     { href: "/admin", icon: LayoutDashboard, label: "Overview" },
