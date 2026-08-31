@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, Banknote, Clock, Users, Store, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Activity, Banknote, Clock, Users, Store, FileText, UserCheck, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { formatNaira } from "@/lib/utils";
 import type { AnalyticsData } from "@/lib/admin/analytics";
 import {
@@ -14,6 +14,7 @@ const TABS = [
   { id: "logging",   label: "Credit logging", icon: Store },
   { id: "repayment", label: "Repayment",  icon: Clock },
   { id: "customers", label: "Customers",  icon: Users },
+  { id: "usage",     label: "Usage & activity", icon: UserCheck },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -58,6 +59,69 @@ export function AnalyticsClient({ data, initialTab = "overview" }: { data: Analy
       {tab === "logging"   && <LoggingTab data={data} />}
       {tab === "repayment" && <RepaymentTab data={data} />}
       {tab === "customers" && <CustomersTab data={data} />}
+      {tab === "usage"     && <UsageTab data={data} />}
+    </div>
+  );
+}
+
+// ── Product usage and vendor activity ───────────────────────────────────────
+
+function UsageTab({ data }: { data: AnalyticsData }) {
+  const h = data.headline;
+  const invoiceRows = data.invoiceSources.map((row) => [
+    row.source === "WHATSAPP" ? "WhatsApp" : "Web dashboard",
+    row.count,
+    formatNaira(row.total),
+    formatNaira(row.paid),
+  ] as (string | number)[]);
+
+  return (
+    <div className="space-y-6">
+      <section>
+        <SectionHeading title="Solution adoption" sub="Invoices issued by the product surface vendors use" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <StatTile label="Invoices issued" value={String(h.totalInvoices)} sub="Web + WhatsApp" />
+          <StatTile label="Web invoices" value={String(h.webInvoices)} sub="Created in dashboard" />
+          <StatTile label="WhatsApp invoices" value={String(h.whatsappInvoices)} sub="Created in WhatsApp" />
+          <StatTile label="Active vendors" value={String(h.activeVendorsInteracting30d)} sub="Any interaction in 30 days" tone={h.activeVendorsInteracting30d > 0 ? "good" : "warning"} />
+        </div>
+        <div className="grid lg:grid-cols-2 gap-4">
+          <ChartCard
+            title="Invoice channel mix"
+            sub="Count and value of all invoices issued"
+            table={{ head: ["Channel", "Invoices", "Value", "Paid"], rows: invoiceRows }}
+          >
+            <BarsH
+              data={data.invoiceSources.map((row) => ({ ...row, label: row.source === "WHATSAPP" ? "WhatsApp" : "Web dashboard" }))}
+              xKey="label"
+              dataKey="count"
+              colors={[SERIES.gold, SERIES.blue]}
+            />
+          </ChartCard>
+          <div className="rounded-2xl border border-vodium-gold/15 bg-vodium-gold/[0.04] p-5 md:p-6 text-sm text-vodium-cream/55 leading-relaxed">
+            <FileText size={17} className="text-vodium-gold mb-3" />
+            <p className="text-vodium-cream/80 font-medium mb-2">What this tells us</p>
+            <p>Invoice source is recorded at creation, so the team can see which solution vendors are choosing—not just whether an invoice was eventually sent.</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <SectionHeading title="Vendor activeness" sub="Any meaningful product interaction in the last 30 days—not credit logging alone" />
+        <ChartCard title="Most engaged vendors" sub="Credits, invoices, and audited web/WhatsApp actions combined">
+          <DataTable
+            head={["Vendor", "Community", "Interactions", "Credits", "Invoices", "Last active"]}
+            rows={data.vendorEngagement.slice(0, 12).map((v) => [
+              v.name,
+              v.community,
+              v.interactions30d,
+              v.credits30d,
+              v.invoices30d,
+              v.lastInteractedAt ? new Date(v.lastInteractedAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "Never",
+            ])}
+          />
+        </ChartCard>
+      </section>
     </div>
   );
 }

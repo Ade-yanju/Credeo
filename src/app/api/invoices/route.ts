@@ -91,6 +91,7 @@ export async function POST(req: NextRequest) {
         vendorId: ctx.vendor.id,
         studentId: customer.id,
         invoiceNumber: nextInvoiceNumber((ctx.organization?.slug ?? "VDM").slice(0, 4).toUpperCase()),
+        source: "WEB",
         status: "DRAFT",
         subtotal,
         discountAmount: discount,
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest) {
       action: "invoice.created",
       entityType: "Invoice",
       entityId: invoice.id,
-      metadata: { organizationId: ctx.organizationId, invoiceNumber: invoice.invoiceNumber, total },
+      metadata: { organizationId: ctx.organizationId, invoiceNumber: invoice.invoiceNumber, total, source: "WEB" },
       ipAddress: ipFromRequest(req),
     });
 

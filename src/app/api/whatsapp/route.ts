@@ -62,6 +62,7 @@ import {
   maskPhone,
 } from "../../../lib/customer-verify";
 import type { WhatsAppState } from "@prisma/client";
+import { writeAudit } from "../../../lib/audit";
 
 export const runtime = "nodejs";
 
@@ -1418,6 +1419,7 @@ async function runSideEffect(
           vendorId,
           studentId: customer.id,
           invoiceNumber: `INV-${(organization.slug ?? "VDM").slice(0, 4).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`,
+          source: "WHATSAPP",
           status: "DRAFT",
           subtotal,
           discountAmount: 0,
@@ -1432,6 +1434,15 @@ async function runSideEffect(
             })),
           },
         },
+      });
+
+      await writeAudit({
+        actorType: "vendor",
+        actorId: vendorId,
+        action: "invoice.created",
+        entityType: "Invoice",
+        entityId: invoice.id,
+        metadata: { organizationId: vendor.organizationId, invoiceNumber: invoice.invoiceNumber, total: subtotal, source: "WHATSAPP" },
       });
 
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://vodiumledger.com";
@@ -1471,6 +1482,14 @@ async function runSideEffect(
       }
 
       await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "SENT", sentAt: new Date() } });
+      await writeAudit({
+        actorType: "vendor",
+        actorId: vendorId,
+        action: "invoice.sent",
+        entityType: "Invoice",
+        entityId: invoice.id,
+        metadata: { organizationId: vendor.organizationId, invoiceNumber: invoice.invoiceNumber, to: customer.phone, source: "WHATSAPP" },
+      });
       await prisma.notification.create({
         data: {
           vendorId,

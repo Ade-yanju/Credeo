@@ -82,7 +82,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     action: "invoice.sent",
     entityType: "Invoice",
     entityId: invoice.id,
-    metadata: { organizationId: ctx.organizationId, invoiceNumber: invoice.invoiceNumber, to: invoice.student.phone },
+    metadata: { organizationId: ctx.organizationId, invoiceNumber: invoice.invoiceNumber, to: invoice.student.phone, source: invoice.source },
     ipAddress: ipFromRequest(req),
   });
 

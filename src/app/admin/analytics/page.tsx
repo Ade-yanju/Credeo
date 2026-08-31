@@ -12,7 +12,7 @@ export default async function AdminAnalyticsPage() {
         <p className="text-xs uppercase tracking-[0.2em] text-vodium-gold">Platform analytics</p>
         <h1 className="font-serif text-2xl md:text-3xl text-vodium-cream mt-1">Analytics</h1>
         <p className="text-sm text-vodium-cream/45 mt-1">
-          Credit logging and repayment behaviour across every vendor and customer. Live — refreshes on load.
+          Credit, invoice adoption, vendor activity, and repayment behaviour across every vendor and customer. Live — refreshes on load.
         </p>
       </div>
 

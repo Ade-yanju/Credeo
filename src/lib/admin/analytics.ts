@@ -14,6 +14,8 @@ export interface TimingBucket { bucket: string; count: number }
 export interface HourCell { day: string; hour: number; count: number }
 export interface VendorRow { name: string; community: string; credits: number; recovered: number; recoveryRate: number }
 export interface SizeBucket { bucket: string; count: number }
+export interface InvoiceSourceRow { source: "WEB" | "WHATSAPP"; count: number; total: number; paid: number }
+export interface VendorEngagementRow { name: string; community: string; interactions30d: number; lastInteractedAt: string | null; credits30d: number; invoices30d: number }
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -23,7 +25,7 @@ export async function getAnalytics() {
     totalCredits, paidCredits, writtenOff, partial, overdue, outstanding,
     totalVendors, totalCustomers,
     monthly, onTime, timing, logHours, topVendors, sizeBuckets,
-    scoreDist, repeatCustomers, vendorActivity,
+    scoreDist, repeatCustomers, vendorActivity, invoiceSources, vendorEngagement, activeInteractionVendors,
   ] = await Promise.all([
     prisma.credit.aggregate({ _sum: { amount: true }, _avg: { amount: true } }),
     prisma.repayment.aggregate({ _sum: { amount: true } }),
@@ -155,6 +157,56 @@ export async function getAnalytics() {
         COUNT(DISTINCT c."vendorId")                                                            AS ever
       FROM "Credit" c
     `,
+
+    // Invoice adoption by the channel vendors use to issue them.
+    prisma.$queryRaw<Array<{ source: "WEB" | "WHATSAPP"; count: bigint; total: number; paid: number }>>`
+      SELECT i.source, COUNT(*) AS count,
+             COALESCE(SUM(i.total), 0)::float AS total,
+             COALESCE(SUM(i."amountPaid"), 0)::float AS paid
+      FROM "Invoice" i
+      GROUP BY i.source
+    `,
+
+    // A vendor is active when they interact with the product, not only when
+    // they log credit. Audit events cover web actions; invoices and credits
+    // are included directly so older records remain visible too.
+    prisma.$queryRaw<Array<{ name: string; community: string; interactions30d: bigint; last_interacted: Date | null; credits30d: bigint; invoices30d: bigint }>>`
+      WITH events AS (
+        SELECT c."vendorId" AS vendor_id, c."createdAt" AS occurred_at, 'credit' AS kind
+        FROM "Credit" c
+        UNION ALL
+        SELECT i."vendorId", i."createdAt", 'invoice'
+        FROM "Invoice" i
+        UNION ALL
+        SELECT a."actorId", a."createdAt", 'interaction'
+        FROM "AuditLog" a
+        WHERE a."actorType" = 'vendor' AND a."actorId" IS NOT NULL
+      )
+      SELECT v."businessName" AS name,
+             COALESCE(cm."shortName", cm.name, '—') AS community,
+             COUNT(e.occurred_at) FILTER (WHERE e.occurred_at >= NOW() - INTERVAL '30 days') AS "interactions30d",
+             MAX(e.occurred_at) AS last_interacted,
+             COUNT(*) FILTER (WHERE e.kind = 'credit' AND e.occurred_at >= NOW() - INTERVAL '30 days') AS "credits30d",
+             COUNT(*) FILTER (WHERE e.kind = 'invoice' AND e.occurred_at >= NOW() - INTERVAL '30 days') AS "invoices30d"
+      FROM "Vendor" v
+      LEFT JOIN events e ON e.vendor_id = v.id
+      LEFT JOIN "Community" cm ON cm.id = v."communityId"
+      GROUP BY v.id, v."businessName", cm."shortName", cm.name
+      ORDER BY "interactions30d" DESC, last_interacted DESC NULLS LAST
+    `,
+
+    prisma.$queryRaw<Array<{ active_30d: bigint }>>`
+      WITH events AS (
+        SELECT c."vendorId" AS vendor_id, c."createdAt" AS occurred_at FROM "Credit" c
+        UNION ALL
+        SELECT i."vendorId", i."createdAt" FROM "Invoice" i
+        UNION ALL
+        SELECT a."actorId", a."createdAt" FROM "AuditLog" a
+        WHERE a."actorType" = 'vendor' AND a."actorId" IS NOT NULL
+      )
+      SELECT COUNT(DISTINCT vendor_id) FILTER (WHERE occurred_at >= NOW() - INTERVAL '30 days') AS active_30d
+      FROM events
+    `,
   ]);
 
   const num = (v: bigint | number | null | undefined) => Number(v ?? 0);
@@ -177,6 +229,10 @@ export async function getAnalytics() {
   for (const r of logHours) hourCells[`${DAY_LABELS[r.dow]}-${r.hour}`] = num(r.count);
 
   const activity = vendorActivity[0] ?? { active_7d: 0n, active_30d: 0n, ever: 0n };
+  const invoiceSourceRows: InvoiceSourceRow[] = (["WEB", "WHATSAPP"] as const).map((source) => {
+    const row = invoiceSources.find((r) => r.source === source);
+    return { source, count: num(row?.count), total: Number(row?.total ?? 0), paid: Number(row?.paid ?? 0) };
+  });
 
   return {
     headline: {
@@ -190,6 +246,10 @@ export async function getAnalytics() {
       activeVendors7d: num(activity.active_7d),
       activeVendors30d: num(activity.active_30d),
       vendorsEverLogged: num(activity.ever),
+      totalInvoices: invoiceSourceRows.reduce((sum, row) => sum + row.count, 0),
+      webInvoices: invoiceSourceRows.find((row) => row.source === "WEB")?.count ?? 0,
+      whatsappInvoices: invoiceSourceRows.find((row) => row.source === "WHATSAPP")?.count ?? 0,
+      activeVendorsInteracting30d: num(activeInteractionVendors[0]?.active_30d),
     },
     health: { paidCredits, partial, overdue, writtenOff, outstanding, totalCredits },
     monthly: monthly.map((m) => ({ month: m.month, extended: m.extended, recovered: m.recovered, credits: m.credits })),
@@ -221,6 +281,15 @@ export async function getAnalytics() {
       bucket,
       count: num(repeatCustomers.find((r) => r.bucket === bucket)?.count),
     })),
+    invoiceSources: invoiceSourceRows,
+    vendorEngagement: vendorEngagement.map((v) => ({
+      name: v.name,
+      community: v.community,
+      interactions30d: num(v.interactions30d),
+      lastInteractedAt: v.last_interacted?.toISOString() ?? null,
+      credits30d: num(v.credits30d),
+      invoices30d: num(v.invoices30d),
+    })) as VendorEngagementRow[],
   };
 }
 
