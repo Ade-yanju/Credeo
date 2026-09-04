@@ -5,6 +5,8 @@ import { ArrowRight, Clock, User } from "lucide-react";
 import { MagicCard } from "@/components/ui/magic-card";
 import { AnimatedBorder } from "@/components/ui/animated-border";
 import { NewsletterForm } from "@/components/ui/newsletter-form";
+import { prisma } from "@/lib/prisma";
+import { readingTime } from "@/lib/news";
 
 export const metadata = {
   title: "Blog : Vodium Ledger",
@@ -152,8 +154,11 @@ function PostCard({ post }: { post: BlogPost }) {
   );
 }
 
-export default function BlogPage() {
-  const [featured, ...rest] = posts;
+export default async function BlogPage() {
+  const published = await prisma.newsPost.findMany({ where: { status: "PUBLISHED", publishedAt: { not: null } }, orderBy: { publishedAt: "desc" }, take: 50 });
+  const managedPosts: BlogPost[] = published.map((post, index) => ({ tag: post.category, tagColor: index % 3 === 0 ? "gold" : index % 3 === 1 ? "purple" : "emerald", date: new Date(post.publishedAt!).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" }), title: post.title, excerpt: post.excerpt, author: post.authorName, readTime: readingTime(post.content), href: `/blog/${post.slug}`, featured: index === 0 }));
+  const allPosts = [...managedPosts, ...posts];
+  const [featured, ...rest] = allPosts;
 
   return (
     <div className="marketing-page min-h-screen">

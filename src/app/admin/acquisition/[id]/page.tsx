@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getAdminSession } from "@/lib/session";
 import { AcquisitionDetailClient } from "@/components/admin/acquisition-detail-client";
+import { ACQUISITION_OPERATORS } from "@/lib/acquisition";
 
 export const dynamic = "force-dynamic";
 export default async function AcquisitionDetailPage({ params }: { params: { id: string } }) {
@@ -12,8 +13,8 @@ export default async function AcquisitionDetailPage({ params }: { params: { id: 
       activities: { include: { createdBy: { select: { name: true } } }, orderBy: { occurredAt: "desc" } },
     } }),
     Promise.resolve(getAdminSession()),
-    prisma.adminUser.findMany({ where: { activatedAt: { not: null }, role: { in: ["SUPER_ADMIN", "MARKETING", "CUSTOMER_CARE"] } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.adminUser.findMany({ where: { activatedAt: { not: null } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   if (!prospect) notFound();
-  return <AcquisitionDetailClient prospect={JSON.parse(JSON.stringify(prospect))} admins={admins} canWrite={session?.role === "SUPER_ADMIN" || session?.role === "MARKETING" || session?.role === "CUSTOMER_CARE"} />;
+  return <AcquisitionDetailClient prospect={JSON.parse(JSON.stringify(prospect))} admins={admins} canWrite={Boolean(session && (ACQUISITION_OPERATORS as readonly string[]).includes(session.role))} />;
 }

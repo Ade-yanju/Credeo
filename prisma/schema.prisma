@@ -1026,9 +1026,35 @@ model AdminUser {
   assignedProspects     AcquisitionProspect[] @relation("ProspectAssignedTo")
   acquisitionActivities AcquisitionActivity[]
   acquisitionCampaigns  AcquisitionCampaign[] @relation("CampaignOwner")
+  newsPosts             NewsPost[]
 
   @@index([email])
   @@index([inviteToken])
+}
+
+model NewsPost {
+  id              String        @id @default(cuid())
+  slug            String        @unique
+  title           String
+  excerpt         String
+  content         String        @db.Text
+  category        String        @default("NEWS")
+  authorName      String
+  coverImageUrl   String?
+  status          NewsPostStatus @default(DRAFT)
+  publishedAt     DateTime?
+  createdByAdminId String?
+  createdByAdmin  AdminUser?    @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([status, publishedAt])
+  @@index([createdByAdminId])
+}
+
+enum NewsPostStatus {
+  DRAFT
+  PUBLISHED
 }
 
 // ─────────────────────────────────────────────

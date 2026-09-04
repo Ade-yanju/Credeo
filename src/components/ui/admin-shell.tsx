@@ -22,6 +22,7 @@ import {
   ShieldAlert,
   Megaphone,
   Target,
+  Newspaper,
 } from "lucide-react";
 import type { AdminRole } from "@/lib/session";
 
@@ -60,6 +61,7 @@ const NAV_BY_ROLE: Record<
     { href: "/admin/disputes", icon: ShieldAlert, label: "Disputes" },
     { href: "/admin/marketing", icon: Megaphone, label: "Marketing" },
     { href: "/admin/acquisition", icon: Target, label: "Acquisition" },
+    { href: "/admin/news", icon: Newspaper, label: "News" },
     { href: "/admin/analytics", icon: BarChart3, label: "Analytics" },
     { href: "/admin/team", icon: Users, label: "Team" },
   ],
@@ -67,6 +69,8 @@ const NAV_BY_ROLE: Record<
     { href: "/admin", icon: LayoutDashboard, label: "Overview" },
     { href: "/admin/finance", icon: TrendingUp, label: "Finance" },
     { href: "/admin/analytics", icon: BarChart3, label: "Analytics" },
+    { href: "/admin/acquisition", icon: Target, label: "Acquisition" },
+    { href: "/admin/news", icon: Newspaper, label: "News" },
   ],
   CUSTOMER_CARE: [
     { href: "/admin", icon: LayoutDashboard, label: "Overview" },
@@ -74,16 +78,19 @@ const NAV_BY_ROLE: Record<
     { href: "/admin/disputes", icon: ShieldAlert, label: "Disputes" },
     { href: "/admin/vendors", icon: Store, label: "Vendors" },
     { href: "/admin/acquisition", icon: Target, label: "Acquisition" },
+    { href: "/admin/news", icon: Newspaper, label: "News" },
   ],
   ANALYTICS: [
     { href: "/admin", icon: LayoutDashboard, label: "Overview" },
     { href: "/admin/analytics", icon: BarChart3, label: "Analytics" },
     { href: "/admin/acquisition", icon: Target, label: "Acquisition" },
+    { href: "/admin/news", icon: Newspaper, label: "News" },
   ],
   MARKETING: [
     { href: "/admin", icon: LayoutDashboard, label: "Overview" },
     { href: "/admin/marketing", icon: Megaphone, label: "Marketing" },
     { href: "/admin/acquisition", icon: Target, label: "Acquisition" },
+    { href: "/admin/news", icon: Newspaper, label: "News" },
   ],
 };
 
