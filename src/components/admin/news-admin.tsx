@@ -3,11 +3,12 @@ import { useEffect, useState } from "react";
 import { Newspaper, Plus, Save, Trash2, X } from "lucide-react";
 
 type Post = { id: string; slug: string; title: string; excerpt: string; content: string; category: string; authorName: string; coverImageUrl: string | null; status: "DRAFT" | "PUBLISHED"; publishedAt: string | null };
-const empty = { title: "", excerpt: "", content: "", category: "NEWS", authorName: "", coverImageUrl: "", status: "DRAFT" as const, slug: "" };
+type PostForm = { title: string; excerpt: string; content: string; category: string; authorName: string; coverImageUrl: string; status: "DRAFT" | "PUBLISHED"; slug: string };
+const empty: PostForm = { title: "", excerpt: "", content: "", category: "NEWS", authorName: "", coverImageUrl: "", status: "DRAFT", slug: "" };
 const input = "input-dark w-full rounded-lg px-3 py-2 text-sm";
 
 export function NewsAdmin() {
-  const [posts, setPosts] = useState<Post[]>([]); const [form, setForm] = useState(empty); const [editing, setEditing] = useState<string | null>(null); const [showForm, setShowForm] = useState(false); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
+  const [posts, setPosts] = useState<Post[]>([]); const [form, setForm] = useState<PostForm>(empty); const [editing, setEditing] = useState<string | null>(null); const [showForm, setShowForm] = useState(false); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
   async function load() { const res = await fetch("/api/admin/news"); const data = await res.json(); if (res.ok) setPosts(data.posts); }
   useEffect(() => { load(); }, []);
   function set(key: string, value: string) { setForm((f) => ({ ...f, [key]: value })); }
