@@ -8,6 +8,10 @@ import { NewsletterForm } from "@/components/ui/newsletter-form";
 import { prisma } from "@/lib/prisma";
 import { readingTime } from "@/lib/news";
 
+// Posts are managed in the database, so this page must be rendered when
+// requested rather than during CI/build-time static generation.
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Blog : Vodium Ledger",
   description:
