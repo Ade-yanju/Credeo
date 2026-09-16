@@ -49,7 +49,12 @@ function creds() {
  * Turn Meta's error responses into instructions a non-Meta-expert can act on.
  * The raw error is always logged server-side for the full picture.
  */
-function explainMetaError(status: number, error?: { code?: number; message?: string }): string {
+function explainMetaError(status: number, error?: {
+  code?: number;
+  message?: string;
+  error_user_msg?: string;
+  error_subcode?: number;
+}): string {
   const code = error?.code;
   if (code === 190) {
     return "The WhatsApp access token is invalid or expired. Generate a new system-user token in Meta Business Settings and update WHATSAPP_ACCESS_TOKEN in Vercel, then redeploy.";
