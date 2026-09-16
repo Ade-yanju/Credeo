@@ -5,16 +5,12 @@
  */
 
 import { formatNaira } from "@/lib/utils";
-import { normaliseTemplateName } from "@/lib/otp-delivery";
 import { getOrgChannelCredentials } from "@/lib/whatsapp/channel-token";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp/outbound";
+import { resolveCreditLoggedTemplateName } from "@/lib/whatsapp/credit-logged-template";
 
-export const DEFAULT_CREDIT_LOGGED_TEMPLATE = "vodium_credit_logged";
-
-export function resolveCreditLoggedTemplateName(): string {
-  const configured = process.env.WHATSAPP_CREDIT_LOGGED_TEMPLATE_NAME;
-  return configured ? normaliseTemplateName(configured) ?? DEFAULT_CREDIT_LOGGED_TEMPLATE : DEFAULT_CREDIT_LOGGED_TEMPLATE;
-}
+export { DEFAULT_CREDIT_LOGGED_TEMPLATE } from "@/lib/whatsapp/credit-logged-template";
+export { resolveCreditLoggedTemplateName } from "@/lib/whatsapp/credit-logged-template";
 
 export async function sendCreditLoggedNotification(input: {
   organizationId?: string | null;

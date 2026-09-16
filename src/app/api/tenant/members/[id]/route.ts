@@ -72,9 +72,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await requireTenantContext();
-  // Revoking access stays available on a locked account — see the note on
-  // tenant.revoke in lib/entitlement.ts. Never hold a security risk open as
-  // billing pressure.
+  // Account lockout is strictly read-only, including staff membership changes.
   const denied = entitlementDenied(ctx.vendor.subscription, "tenant.revoke");
   if (denied) return denied;
   if (!hasOrgAdminAccess(ctx)) {

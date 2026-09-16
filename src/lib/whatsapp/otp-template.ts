@@ -334,6 +334,170 @@ export async function ensureReminderTemplate(input: {
   return { name: input.name, status: json.status ?? "PENDING", created: true };
 }
 
+/** Create the customer credit-logged UTILITY template if it does not exist. */
+export async function ensureCreditLoggedTemplate(input: {
+  name: string;
+}): Promise<{ name: string; status?: string; created: boolean; detail?: string }> {
+  const { token, phoneId } = creds();
+  if (!token || !phoneId) {
+    return { name: input.name, created: false, detail: "No WhatsApp credentials configured (dev)." };
+  }
+
+  const current = await listOtpTemplates();
+  if (current.detail && !current.templates.length) {
+    return { name: input.name, created: false, detail: current.detail };
+  }
+  const existing = current.templates.find((t) => sameTemplateName(t.name, input.name));
+  if (existing) return { name: input.name, status: existing.status, created: false };
+
+  const waba = await getWabaId(token, phoneId);
+  if ("error" in waba) return { name: input.name, created: false, detail: waba.error };
+
+  const res = await fetch(`${GRAPH}/${waba.id}/message_templates`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: input.name,
+      language: "en_US",
+      category: "UTILITY",
+      components: [{
+        type: "BODY",
+        text:
+          "Hi {{1}}, {{2}} recorded a credit of {{3}} for {{4}} on {{5}}. " +
+          "It is due on {{6}}. Reply PAID when you settle or contact the shop if anything looks wrong.",
+        example: {
+          body_text: [[
+            "Chidi",
+            "Mama Nkechi Stores",
+            "₦2,500",
+            "school supplies",
+            "12 Aug 2026",
+            "19 Aug 2026",
+          ]],
+        },
+      }],
+    }),
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    status?: string;
+    error?: { error_user_msg?: string; error_subcode?: number; message?: string };
+  };
+  if (!res.ok) {
+    console.error("[credit-logged-template] create failed:", res.status, JSON.stringify(json.error ?? json));
+    return {
+      name: input.name,
+      created: false,
+      detail:
+        json.error?.error_subcode === 2388185
+          ? "Meta requires Business Verification before templates can be created — complete it in Security Center first."
+          : json.error?.error_user_msg ?? explainMetaError(res.status, json.error),
+    };
+  }
+  return { name: input.name, status: json.status ?? "PENDING", created: true };
+}
+
+/** Create the scheduled vendor-digest UTILITY template if it does not exist. */
+export async function ensureVendorDigestTemplate(input: {
+  name: string;
+}): Promise<{ name: string; status?: string; created: boolean; detail?: string }> {
+  const { token, phoneId } = creds();
+  if (!token || !phoneId) {
+    return { name: input.name, created: false, detail: "No WhatsApp credentials configured (dev)." };
+  }
+
+  const current = await listOtpTemplates();
+  if (current.detail && !current.templates.length) {
+    return { name: input.name, created: false, detail: current.detail };
+  }
+  const existing = current.templates.find((t) => sameTemplateName(t.name, input.name));
+  if (existing) return { name: input.name, status: existing.status, created: false };
+
+  const waba = await getWabaId(token, phoneId);
+  if ("error" in waba) return { name: input.name, created: false, detail: waba.error };
+
+  const res = await fetch(`${GRAPH}/${waba.id}/message_templates`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: input.name,
+      language: "en_US",
+      category: "UTILITY",
+      components: [{
+        type: "BODY",
+        text: "Hi {{1}}, here is your Vodium Ledger summary:\n\n{{2}}",
+        example: { body_text: [["Nkechi", "You have ₦96,750 still owing. 3 customers are overdue."]] },
+      }],
+    }),
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    status?: string;
+    error?: { error_user_msg?: string; error_subcode?: number; message?: string };
+  };
+  if (!res.ok) {
+    console.error("[vendor-digest-template] create failed:", res.status, JSON.stringify(json.error ?? json));
+    return {
+      name: input.name,
+      created: false,
+      detail:
+        json.error?.error_subcode === 2388185
+          ? "Meta requires Business Verification before templates can be created — complete it in Security Center first."
+          : json.error?.error_user_msg ?? explainMetaError(res.status, json.error),
+    };
+  }
+  return { name: input.name, status: json.status ?? "PENDING", created: true };
+}
+
+/** Create the subscription/grace-period UTILITY template if it is missing. */
+export async function ensureSubscriptionNudgeTemplate(input: {
+  name: string;
+}): Promise<{ name: string; status?: string; created: boolean; detail?: string }> {
+  const { token, phoneId } = creds();
+  if (!token || !phoneId) {
+    return { name: input.name, created: false, detail: "No WhatsApp credentials configured (dev)." };
+  }
+
+  const current = await listOtpTemplates();
+  if (current.detail && !current.templates.length) {
+    return { name: input.name, created: false, detail: current.detail };
+  }
+  const existing = current.templates.find((t) => sameTemplateName(t.name, input.name));
+  if (existing) return { name: input.name, status: existing.status, created: false };
+
+  const waba = await getWabaId(token, phoneId);
+  if ("error" in waba) return { name: input.name, created: false, detail: waba.error };
+
+  const res = await fetch(`${GRAPH}/${waba.id}/message_templates`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: input.name,
+      language: "en_US",
+      category: "UTILITY",
+      components: [{
+        type: "BODY",
+        text: "Hi {{1}}, {{2}}",
+        example: { body_text: [["Amina", "your Vodium Ledger subscription is approaching its renewal date."]] },
+      }],
+    }),
+  });
+  const json = (await res.json().catch(() => ({}))) as {
+    status?: string;
+    error?: { error_user_msg?: string; error_subcode?: number };
+  };
+  if (!res.ok) {
+    console.error("[subscription-template] create failed:", res.status, JSON.stringify(json.error ?? json));
+    return {
+      name: input.name,
+      created: false,
+      detail:
+        json.error?.error_subcode === 2388185
+          ? "Meta requires Business Verification before templates can be created — complete it in Security Center first."
+          : json.error?.error_user_msg ?? explainMetaError(res.status, json.error),
+    };
+  }
+  return { name: input.name, status: json.status ?? "PENDING", created: true };
+}
+
 /**
  * Create the customer invoice UTILITY template if it doesn't exist. This lets
  * vendor-generated invoices reach customers even when they have not messaged

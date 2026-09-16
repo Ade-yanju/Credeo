@@ -1,18 +1,16 @@
 /**
  * Vodium Ledger — grace-period nudges.
  *
- * When a trial or a paid period lapses, the vendor keeps full access for
- * GRACE_DAYS while we tell them, three times, exactly what is about to change.
+ * When a paid period lapses, the vendor keeps full access for GRACE_DAYS while
+ * we tell them, three times, exactly what is about to change. Free trials are
+ * intentionally excluded: they become read-only as soon as they end.
  * The point is that the lockout should never be a surprise — a vendor who
  * discovers it by failing to log a credit in front of a customer is a vendor
  * we have lost.
  *
  * DELIVERY: email always (every vendor has a verified address — auth is
- * email + password), plus a free WhatsApp message when their 24-hour session
- * happens to be open. No template is used here deliberately: nudges would need
- * their own approved Meta template, and email already guarantees the message
- * lands. Compare lib/vendor-digest.ts, which makes the same call for the same
- * reason.
+ * email + password), plus an approved WhatsApp utility template. Automated
+ * nudges never downgrade to plain text.
  *
  * SEND-ONCE: each stage writes a SubscriptionEvent, and that row is the lock.
  * A cron re-run, a double-fire, or two deploys in one day cannot re-nudge.
@@ -22,12 +20,14 @@ import { Resend } from "resend";
 import { prisma } from "@/lib/prisma";
 import { GRACE_DAYS } from "@/lib/entitlement";
 import { messages } from "@/lib/whatsapp/messages";
-import { sendWhatsAppMessage } from "@/lib/whatsapp/outbound";
+import { sendWhatsAppTemplate, WhatsAppSendError } from "@/lib/whatsapp/outbound";
 import { getOrgChannelCredentials } from "@/lib/whatsapp/channel-token";
-import { hasOpenSession } from "@/lib/whatsapp/session-window";
+import { ensureSubscriptionNudgeTemplate } from "@/lib/whatsapp/otp-template";
+import { resolveSubscriptionNudgeTemplateName } from "@/lib/whatsapp/subscription-nudge-template";
 import { hasSubscriptionEvent, recordSubscriptionEvent, type SubscriptionEventReason } from "@/lib/subscription-events";
 
 const DAY_MS = 86_400_000;
+let provisionAttempted = false;
 
 export interface GraceNudgeResult {
   sent: number;
@@ -57,10 +57,12 @@ export async function sendGraceNudges(input?: { now?: Date }): Promise<GraceNudg
   const now = input?.now ?? new Date();
   const result: GraceNudgeResult = { sent: 0, skipped: 0, failed: 0, whatsapp: 0, email: 0 };
 
-  // Everyone currently inside their grace window.
+  // Only paid subscriptions receive a grace window. Expired free trials are
+  // read-only immediately, including older rows that still have a historical
+  // graceEndsAt value.
   const inGrace = await prisma.vendorSubscription.findMany({
     where: {
-      status: { in: ["EXPIRED", "PAST_DUE"] },
+      status: { in: ["PAST_DUE", "CANCELLED"] },
       graceEndsAt: { gt: now },
     },
     select: {
@@ -105,18 +107,33 @@ export async function sendGraceNudges(input?: { now?: Date }): Promise<GraceNudg
             ? messages.trialEndedGraceMidway(daysLeft)
             : messages.trialEndedGraceStart(daysLeft);
 
-      // WhatsApp — free and immediate, but only inside an open window.
-      if (await hasOpenSession(sub.vendor.phone, now)) {
+      // WhatsApp — template-only, so this remains deliverable outside the
+      // 24-hour session window.
+      try {
+        const creds = (await getOrgChannelCredentials(sub.vendor.organizationId)) ?? undefined;
+        const firstName = sub.vendor.ownerName.trim().split(/\s+/)[0] || sub.vendor.ownerName;
+        const template = resolveSubscriptionNudgeTemplateName();
         try {
-          const creds = (await getOrgChannelCredentials(sub.vendor.organizationId)) ?? undefined;
-          await sendWhatsAppMessage(sub.vendor.phone, body, creds);
-          result.whatsapp++;
-        } catch (err) {
-          console.warn(
-            `[grace-nudge] WhatsApp failed for vendor ${sub.vendorId}:`,
-            err instanceof Error ? err.message : err
+          await sendWhatsAppTemplate(
+            sub.vendor.phone,
+            template,
+            [firstName, body.slice(0, 900)],
+            { creds, languageCode: process.env.WHATSAPP_SUBSCRIPTION_NUDGE_TEMPLATE_LANG ?? "en_US" },
           );
+        } catch (err) {
+          if (err instanceof WhatsAppSendError && err.code === 132001 && !provisionAttempted) {
+            provisionAttempted = true;
+            const provisioned = await ensureSubscriptionNudgeTemplate({ name: template });
+            console.warn(`[grace-nudge] template provisioning: ${provisioned.detail ?? provisioned.status ?? "requested"}`);
+          }
+          throw err;
         }
+        result.whatsapp++;
+      } catch (err) {
+        console.warn(
+          `[grace-nudge] WhatsApp template failed for vendor ${sub.vendorId}:`,
+          err instanceof Error ? err.message : err
+        );
       }
 
       // Email — the channel that always lands.
@@ -228,7 +245,7 @@ function buildGraceHtml(input: {
         </tr>
         <tr>
           <td style="padding:40px;">
-            <p style="margin:0 0 8px;font-size:12px;color:#C9A961;letter-spacing:0.18em;text-transform:uppercase;font-weight:700;">Free trial ended</p>
+            <p style="margin:0 0 8px;font-size:12px;color:#C9A961;letter-spacing:0.18em;text-transform:uppercase;font-weight:700;">Subscription period ended</p>
             <h1 style="margin:0 0 16px;font-family:Georgia,serif;font-size:25px;color:#0A0A0A;line-height:1.25;">
               ${headline}
             </h1>

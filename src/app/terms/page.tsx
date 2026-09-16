@@ -213,8 +213,10 @@ export default function TermsPage() {
             <li>
               <strong>By you:</strong> You may
               delete your account at any time from Settings → Danger zone. We
-              will purge your data within 30 days, subject to legal retention
-              requirements.
+              we will disable access immediately and retain the account and
+              financial records for 90 days for fraud, financial, dispute or
+              legal review. We will then securely purge or de-identify them,
+              subject to legal retention requirements and active investigations.
             </li>
             <li>
               <strong>By us:</strong> We may

@@ -52,9 +52,12 @@ async function handleRequest(json: unknown) {
 
   // Constant-time compare to prevent user enumeration.
   const dummyHash = "$2a$12$invalidhashpadding00000000000000000000000000000000000";
-  const match     = await bcrypt.compare(password, vendor?.passwordHash ?? dummyHash);
+  const match     = await bcrypt.compare(
+    password,
+    vendor?.deletionRequestedAt ? dummyHash : (vendor?.passwordHash ?? dummyHash),
+  );
 
-  if (!vendor || !match) {
+  if (!vendor || vendor.deletionRequestedAt || !match) {
     return NextResponse.json({ error: "Incorrect email or password" }, { status: 401 });
   }
 
@@ -94,7 +97,7 @@ async function handleVerify(json: unknown) {
   clearOtpCookie("login");
 
   const vendor = await prisma.vendor.findUnique({ where: { email } });
-  if (!vendor) {
+  if (!vendor || vendor.deletionRequestedAt) {
     return NextResponse.json({ error: "Account not found" }, { status: 404 });
   }
 

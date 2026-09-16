@@ -77,13 +77,13 @@ export function VendorStatusActions({ vendorId, currentStatus, businessName }: P
           </button>
         )}
 
-        {/* Delete */}
+        {/* Close account */}
         <button
           onClick={() => setShowDelete(true)}
           disabled={loading !== null}
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-rose-500/10 border border-rose-500/25 text-rose-400 hover:bg-rose-500/20 transition-colors disabled:opacity-50"
         >
-          <Trash2 size={14} /> Delete
+          <Trash2 size={14} /> Close account
         </button>
       </div>
 
@@ -104,9 +104,9 @@ export function VendorStatusActions({ vendorId, currentStatus, businessName }: P
                   <AlertTriangle size={18} className="text-rose-400" />
                 </div>
                 <div>
-                  <p className="font-serif text-vodium-cream text-base">Delete vendor account</p>
+                  <p className="font-serif text-vodium-cream text-base">Close vendor account</p>
                   <p className="text-vodium-cream/45 text-sm mt-1 leading-relaxed">
-                    This permanently deletes <span className="text-vodium-cream font-semibold">{businessName}</span> and all their credits, repayments, and data. This cannot be undone.
+                    This closes <span className="text-vodium-cream font-semibold">{businessName}</span> immediately. Their records are retained for 90 days for fraud, financial, or legal review, then securely purged.
                   </p>
                 </div>
                 <button onClick={() => setShowDelete(false)} className="text-vodium-cream/30 hover:text-vodium-cream/70 flex-shrink-0">
@@ -133,7 +133,7 @@ export function VendorStatusActions({ vendorId, currentStatus, businessName }: P
                   className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold bg-rose-600 hover:bg-rose-500 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {loading === "delete" ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                  Delete permanently
+                  Close account
                 </button>
               </div>
             </div>

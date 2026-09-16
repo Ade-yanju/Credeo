@@ -6,6 +6,7 @@ import { rateLimit } from "@/lib/redis";
 import { normalisePhoneNG } from "@/lib/utils";
 import { getStudentLimit } from "@/lib/plan";
 import { guardVendorWrite } from "@/lib/entitlement-guard";
+import { getEntitlement } from "@/lib/entitlement";
 import { nextVendorCustomerId } from "@/lib/customer-id";
 import { markOverdueCredits } from "@/lib/credit-lifecycle";
 import crypto from "crypto";
@@ -23,10 +24,15 @@ export async function GET(req: NextRequest) {
   const phone = getSessionPhone();
   if (!phone) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const vendor = await prisma.vendor.findUnique({ where: { phone } });
+  const vendor = await prisma.vendor.findUnique({ where: { phone }, include: { subscription: true } });
   if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
 
-  await markOverdueCredits({ vendorId: vendor.id });
+  // Listing data must stay read-only after a free trial ends. Refreshing
+  // derived overdue statuses is a write, so only do it while the vendor has
+  // an active or paid-grace entitlement.
+  if (getEntitlement(vendor.subscription).canWrite) {
+    await markOverdueCredits({ vendorId: vendor.id });
+  }
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") as CreditStatus | null;

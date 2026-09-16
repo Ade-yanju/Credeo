@@ -22,6 +22,8 @@ export const ADMIN_ROUTE_ROLES: Array<{ prefix: string; roles: string[] }> = [
   { prefix: "/api/admin/acquisition", roles: ["SUPER_ADMIN", "CFO", "CUSTOMER_CARE", "ANALYTICS", "MARKETING"] },
   { prefix: "/admin/news", roles: ["SUPER_ADMIN", "CFO", "CUSTOMER_CARE", "ANALYTICS", "MARKETING"] },
   { prefix: "/api/admin/news", roles: ["SUPER_ADMIN", "CFO", "CUSTOMER_CARE", "ANALYTICS", "MARKETING"] },
+  { prefix: "/admin/whatsapp-outbox", roles: ["SUPER_ADMIN", "CUSTOMER_CARE", "ANALYTICS"] },
+  { prefix: "/api/admin/whatsapp-outbox", roles: ["SUPER_ADMIN", "CUSTOMER_CARE", "ANALYTICS"] },
   { prefix: "/api/admin/ambassadors", roles: ["SUPER_ADMIN", "MARKETING"] },
   { prefix: "/api/admin/whatsapp-profile", roles: ["SUPER_ADMIN"] },
   { prefix: "/admin/organizations", roles: ["SUPER_ADMIN"] },

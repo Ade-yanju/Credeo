@@ -542,10 +542,9 @@ export const messages = {
   // Escalating, never shaming. The vendor is told exactly what still works and
   // exactly when it stops, so nothing about the lockout arrives as a surprise.
   trialEndedGraceStart: (daysLeft: number) =>
-    `Your free trial ended today.\n\n` +
+    `Your subscription period ended today.\n\n` +
     `Nothing has changed yet — you still have *${daysLeft} days* of full access. ` +
-    `After that you'll still see all your records and can still record money customers pay you, ` +
-    `but adding new credit, invoices and reminders will pause.\n\n` +
+    `After that you'll still see all your records, but changes will pause.\n\n` +
     `Reply *UPGRADE* to keep everything running.`,
 
   trialEndedGraceMidway: (daysLeft: number) =>
@@ -555,14 +554,14 @@ export const messages = {
 
   trialEndedGraceFinal: () =>
     `Last day of full access.\n\n` +
-    `From tomorrow you'll still be able to open your dashboard and record repayments, ` +
-    `but adding new credit, invoices and reminders will pause until you renew.\n\n` +
+    `From tomorrow you'll still be able to open your dashboard and view your records, ` +
+    `but changes will pause until you renew.\n\n` +
     `Reply *UPGRADE* to stay switched on.`,
 
   accountLocked: () =>
-    `Your free trial has ended. Your records are safe and you can still view them ` +
-    `and record money customers pay you, but adding credits, invoices, imports and ` +
-    `reminders are paused until you renew.`,
+    `Your free trial has ended. Your records are safe and available to view, but ` +
+    `all changes — including credits, payments, invoices, imports and reminders — ` +
+    `are paused until you renew.`,
 
   // ── HELP & misc ────────────────────────────────────────────────────────
   help: () =>

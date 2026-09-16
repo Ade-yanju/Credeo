@@ -43,7 +43,7 @@ export default function PrivacyPage() {
       <p>We share data with service providers that help us operate (for example payment processors, messaging and email providers, hosting), under contracts that protect the data. We may disclose data where required by law.</p>
 
       <h2>6. Retention</h2>
-      <p>We retain credit and transaction records for as long as needed to provide the Service and to meet legal and accounting requirements, after which data is deleted or de-identified. Organizations may request deletion subject to these obligations.</p>
+      <p>When an account is closed, access is disabled immediately and the account and financial records are retained for 90 days for fraud prevention, financial reconciliation, disputes and lawful investigations. After that window, data is securely deleted or de-identified, except where a longer period is required by law or an active investigation. Organizations may request deletion subject to these obligations.</p>
 
       <h2>7. Your rights</h2>
       <p>

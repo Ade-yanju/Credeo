@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { normalisePhone } from "@/lib/utils";
 import { hasOrgAdminAccess, requireTenantContext } from "@/lib/tenant-context";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 import { resolveChannelCredentials } from "@/lib/whatsapp/channel-token";
 import { sendWhatsAppMessage } from "@/lib/whatsapp/outbound";
 
@@ -12,6 +13,8 @@ const schema = z.object({ toPhone: z.string().min(7).max(20) });
 // confirm their number is connected and working.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const ctx = await requireTenantContext();
+  const denied = entitlementDenied(ctx.vendor.subscription, "tenant.write");
+  if (denied) return denied;
   if (!hasOrgAdminAccess(ctx)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

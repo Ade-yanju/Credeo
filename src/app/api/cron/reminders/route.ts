@@ -145,6 +145,8 @@ export async function GET(req: NextRequest) {
       // approved template instead (free text to them is silently dropped).
       await sendCustomerReminder({
         phone: student.phone,
+        organizationId: vendor.organizationId,
+        idempotencyKey: `pre-due-reminder:${credit.id}:${credit.dueDate.toISOString()}`,
         customerName: student.fullName,
         shopName: vendor.businessName,
         amountOwed: Number(credit.amount) - Number(credit.amountRepaid),

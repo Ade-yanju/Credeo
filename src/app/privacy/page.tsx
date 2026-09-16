@@ -177,9 +177,12 @@ export default function PrivacyPage() {
         <Section title="Data retention">
           <ul>
             <li>
-              Vendor accounts and credit records: retained while your account is
-              active and for 3 years after closure (Nigerian accounting
-              requirement).
+              Vendor accounts and credit records: when you close your account,
+              access is disabled immediately and the records are retained for
+              90 days for fraud prevention, financial reconciliation, disputes
+              and lawful investigations. They are then securely purged or
+              de-identified, except where a longer period is required by law or
+              an active investigation.
             </li>
             <li>
               Student records: retained as long as there is at least one active

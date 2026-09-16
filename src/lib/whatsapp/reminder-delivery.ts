@@ -21,6 +21,7 @@ import {
 import { normaliseTemplateName } from "@/lib/otp-delivery";
 import { ensureReminderTemplate } from "@/lib/whatsapp/otp-template";
 import { isTemplateUnusable } from "@/lib/whatsapp/session-window";
+import { enqueueWhatsAppTemplate, dispatchWhatsAppOutboxMessage } from "@/lib/whatsapp/outbox";
 
 export const DEFAULT_REMINDER_TEMPLATE = "vodium_payment_reminder";
 
@@ -47,6 +48,8 @@ export type ReminderChannel = "template";
  */
 export async function sendCustomerReminder(input: {
   phone: string;
+  organizationId?: string | null;
+  idempotencyKey?: string;
   customerName: string;
   shopName: string;
   amountOwed: number;
@@ -65,10 +68,24 @@ export async function sendCustomerReminder(input: {
   const firstName = customerName.trim().split(/\s+/)[0] || customerName;
 
   try {
-    await sendWhatsAppTemplate(phone, template, [firstName, shopName, formatNaira(amountOwed), dueText], {
-      creds,
-      languageCode: process.env.WHATSAPP_REMINDER_TEMPLATE_LANG ?? "en_US",
-    });
+    if (input.organizationId) {
+      const queued = await enqueueWhatsAppTemplate({
+        idempotencyKey: input.idempotencyKey ?? `reminder:${phone}:${template}:${amountOwed}:${dueText}`,
+        organizationId: input.organizationId,
+        recipient: phone,
+        kind: "TEMPLATE",
+        templateName: template,
+        languageCode: process.env.WHATSAPP_REMINDER_TEMPLATE_LANG ?? "en_US",
+        bodyParams: [firstName, shopName, formatNaira(amountOwed), dueText],
+      });
+      const status = await dispatchWhatsAppOutboxMessage(queued.id, { rethrowFailure: true });
+      if (status !== "SENT") throw new Error(`Reminder outbox ${status.toLowerCase()}`);
+    } else {
+      await sendWhatsAppTemplate(phone, template, [firstName, shopName, formatNaira(amountOwed), dueText], {
+        creds,
+        languageCode: process.env.WHATSAPP_REMINDER_TEMPLATE_LANG ?? "en_US",
+      });
+    }
     return { channel: "template" };
   } catch (err) {
     if (isTemplateUnusable(err)) {

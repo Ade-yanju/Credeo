@@ -16,11 +16,13 @@ import { isPermanentFailure, parseMetaErrorCode } from "../src/lib/whatsapp/outb
 import { WhatsAppSendError } from "../src/lib/whatsapp/outbound";
 import {
   deliverThenUpgrade,
+  deliverTemplateOnly,
   isTemplateUnusable,
   type DeliveryChannel,
 } from "../src/lib/whatsapp/session-window";
 import { contactPhoneFrom } from "../src/lib/whatsapp/contact";
 import { messages, payToBlock } from "../src/lib/whatsapp/messages";
+import { commandTextForAi } from "../src/lib/whatsapp/ai-command";
 import { signVerification, verifyVerification, maskPhone } from "../src/lib/customer-verify-token";
 import { ADMIN_ROUTE_ROLES } from "../src/lib/session-cookies";
 
@@ -35,6 +37,14 @@ test("formatNaira formats with the naira sign and separators", () => {
   const out = formatNaira(1000000);
   assert.match(out, /₦/);
   assert.match(out, /1,000,000/);
+});
+
+test("AI command routing only maps confident classifications into safe commands", () => {
+  assert.equal(commandTextForAi({ intent: "LIST", confidence: 0.95 }), "LIST");
+  assert.equal(commandTextForAi({ intent: "SCORE", confidence: 0.91, customerQuery: "  Chidi   Okeke " }), "SCORE Chidi Okeke");
+  assert.equal(commandTextForAi({ intent: "PAID", confidence: 0.89, customerQuery: "Amaka" }), "PAID Amaka");
+  assert.equal(commandTextForAi({ intent: "ADD", confidence: 0.79 }), null);
+  assert.equal(commandTextForAi({ intent: "FREE_TEXT", confidence: 0.99 }), null);
 });
 
 test("secret encryption round-trips and rejects tampering", () => {
@@ -621,4 +631,14 @@ test("deliverThenUpgrade: recipient-level errors propagate, not swallowed", asyn
     }),
     /blocked/,
   );
+});
+
+test("deliverTemplateOnly never downgrades a scheduled message to plain text", async () => {
+  const result = await deliverTemplateOnly({
+    phone: "+2348030000000",
+    sendTemplate: async () => { throw new WhatsAppSendError("missing", 400, 132001); },
+  });
+  assert.equal(result.channel, "template-only");
+  assert.equal(result.delivered, false);
+  assert.match(result.templateIssue ?? "", /no plain-text fallback/i);
 });

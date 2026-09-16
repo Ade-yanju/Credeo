@@ -1,8 +1,22 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/session";
-import { invoiceTemplateVisibilityDetail, listOtpTemplates, ensureInvoiceTemplate, ensureOtpTemplate, ensureReminderTemplate } from "@/lib/whatsapp/otp-template";
+import {
+  invoiceTemplateVisibilityDetail,
+  listOtpTemplates,
+  ensureInvoiceTemplate,
+  ensureOtpTemplate,
+  ensureReminderTemplate,
+  ensureCreditLoggedTemplate,
+  ensureWeeklyReportTemplate,
+  ensureVendorDigestTemplate,
+  ensureSubscriptionNudgeTemplate,
+} from "@/lib/whatsapp/otp-template";
 import { resolveInvoiceTemplateName } from "@/lib/whatsapp/invoice-template";
 import { resolveReminderTemplateName } from "@/lib/whatsapp/reminder-delivery";
+import { resolveCreditLoggedTemplateName } from "@/lib/whatsapp/credit-logged-template";
+import { resolveWeeklyReportTemplateName } from "@/lib/whatsapp/weekly-report-template";
+import { resolveVendorDigestTemplateName } from "@/lib/whatsapp/vendor-digest-template";
+import { resolveSubscriptionNudgeTemplateName } from "@/lib/whatsapp/subscription-nudge-template";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +36,7 @@ function findTemplate(
   return templates.find((template) => normalizeTemplateName(template.name) === target);
 }
 
-// GET — which template OTP sending will use, and whether it exists/is approved.
+// GET — required platform templates and whether each exists/is approved.
 export async function GET() {
   const session = getAdminSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,18 +45,28 @@ export async function GET() {
   const status = await listOtpTemplates();
   const reminderName = resolveReminderTemplateName();
   const reminderTemplate = findTemplate(status.templates, reminderName);
+  const creditLoggedName = resolveCreditLoggedTemplateName();
+  const creditLoggedTemplate = findTemplate(status.templates, creditLoggedName);
   const invoiceName = resolveInvoiceTemplateName();
   const invoiceTemplate = findTemplate(status.templates, invoiceName);
   const invoiceDetail = invoiceTemplate ? undefined : invoiceTemplateVisibilityDetail(status.templates, invoiceName);
+  const weeklyReportName = resolveWeeklyReportTemplateName();
+  const vendorDigestName = resolveVendorDigestTemplateName();
+  const subscriptionNudgeName = resolveSubscriptionNudgeTemplateName();
   return NextResponse.json({
     ...status,
     reminder: { name: reminderName, status: reminderTemplate?.status },
+    creditLogged: { name: creditLoggedName, status: creditLoggedTemplate?.status },
     invoice: { name: invoiceName, status: invoiceTemplate?.status, detail: invoiceDetail },
+    weeklyReport: { name: weeklyReportName, status: findTemplate(status.templates, weeklyReportName)?.status },
+    vendorDigest: { name: vendorDigestName, status: findTemplate(status.templates, vendorDigestName)?.status },
+    subscriptionNudge: { name: subscriptionNudgeName, status: findTemplate(status.templates, subscriptionNudgeName)?.status },
   });
 }
 
-// POST — create the OTP template if missing. Idempotent: an existing template
-// is reported untouched, so this can never break a working setup.
+// POST — provision every required platform template if missing. Idempotent:
+// existing templates are reported untouched, so this cannot break a working
+// setup.
 export async function POST() {
   const session = getAdminSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -56,12 +80,19 @@ export async function POST() {
     return NextResponse.json({ error: result.detail, ...result }, { status: 502 });
   }
 
-  // One click sets up BOTH templates: the OTP (authentication) one and the
-  // payment-reminder (utility) one that reaches out-of-session customers.
+  // One click sets up the complete automated-delivery template set.
   const reminder = await ensureReminderTemplate({ name: resolveReminderTemplateName() });
   if (reminder.detail) console.error("[admin/otp-template] reminder template:", reminder.detail);
+  const creditLogged = await ensureCreditLoggedTemplate({ name: resolveCreditLoggedTemplateName() });
+  if (creditLogged.detail) console.error("[admin/otp-template] credit logged template:", creditLogged.detail);
   const invoice = await ensureInvoiceTemplate({ name: resolveInvoiceTemplateName() });
   if (invoice.detail) console.error("[admin/otp-template] invoice template:", invoice.detail);
+  const weeklyReport = await ensureWeeklyReportTemplate({ name: resolveWeeklyReportTemplateName() });
+  if (weeklyReport.detail) console.error("[admin/otp-template] weekly report template:", weeklyReport.detail);
+  const vendorDigest = await ensureVendorDigestTemplate({ name: resolveVendorDigestTemplateName() });
+  if (vendorDigest.detail) console.error("[admin/otp-template] vendor digest template:", vendorDigest.detail);
+  const subscriptionNudge = await ensureSubscriptionNudgeTemplate({ name: resolveSubscriptionNudgeTemplateName() });
+  if (subscriptionNudge.detail) console.error("[admin/otp-template] subscription nudge template:", subscriptionNudge.detail);
 
-  return NextResponse.json({ ...result, reminder, invoice });
+  return NextResponse.json({ ...result, reminder, creditLogged, invoice, weeklyReport, vendorDigest, subscriptionNudge });
 }

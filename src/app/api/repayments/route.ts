@@ -13,10 +13,8 @@ const schema = z.object({
 
 // POST /api/repayments — shortcut to PATCH /api/credits/[id] for simple payment recording
 export async function POST(req: NextRequest) {
-  // Recording money a customer actually paid stays allowed even after the
-  // trial lapses (see ALLOWED_WHEN_LOCKED in lib/entitlement.ts). Blocking it
-  // would push the vendor back to paper and cost us the repayment history
-  // that is the whole point of Phase 1.
+  // Repayment recording is a business mutation and is blocked when the free
+  // trial has ended; the vendor can still view the repayment history.
   const guard = await guardVendorWrite("repayment.create");
   if (!guard.ok) return guard.response;
   const { vendor } = guard;

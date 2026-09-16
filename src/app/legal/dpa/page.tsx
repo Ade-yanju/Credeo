@@ -47,7 +47,7 @@ export default function DpaPage() {
       <p>Where data is processed outside Nigeria by a sub-processor, appropriate safeguards consistent with the NDPA will be applied.</p>
 
       <h2>9. Retention and deletion</h2>
-      <p>On termination, Vodium will delete or de-identify the Organization&rsquo;s personal data within a reasonable period, except where retention is required by law.</p>
+      <p>On termination, Vodium will disable access and retain the Organization&rsquo;s account and financial records for 90 days for fraud prevention, reconciliation, disputes and lawful investigations. After that period, Vodium will delete or de-identify the data, except where a longer period is required by law or an active investigation.</p>
     </LegalArticle>
   );
 }

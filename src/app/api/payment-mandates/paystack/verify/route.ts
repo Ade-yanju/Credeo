@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireTenantContext } from "@/lib/tenant-context";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 
 type PaystackVerifyResponse = {
   status?: boolean;
@@ -21,6 +22,8 @@ type PaystackVerifyResponse = {
 
 export async function GET(req: NextRequest) {
   const ctx = await requireTenantContext();
+  const denied = entitlementDenied(ctx.vendor.subscription, "mandate.write");
+  if (denied) return denied;
   if (!ctx.organizationId) {
     return NextResponse.json({ error: "Organization is not ready for mandates." }, { status: 400 });
   }

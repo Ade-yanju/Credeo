@@ -84,7 +84,12 @@ export async function reportsWithheldForLockout(weekStart: Date, weekEnd: Date):
   const active = await prisma.vendor.count({
     where: {
       id: { in: candidates },
-      subscription: { OR: [{ status: { in: ["TRIAL", "ACTIVE"] } }, { graceEndsAt: { gt: new Date() } }] },
+      subscription: {
+        OR: [
+          { status: { in: ["TRIAL", "ACTIVE"] } },
+          { status: { in: ["PAST_DUE", "CANCELLED"] }, graceEndsAt: { gt: new Date() } },
+        ],
+      },
     },
   });
   return candidates.length - active;

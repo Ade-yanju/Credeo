@@ -39,8 +39,9 @@ be extracted one at a time without rewriting the product.
 
 - Keep PostgreSQL shared at first, but introduce service-owned tables and avoid
   cross-domain writes from outside the owning module.
-- Add an outbox table before network extraction so invoice/reminder sends can be
-  retried safely without duplicate customer messages.
+- Add an inbox table before network extraction so inbound webhook events remain
+  durable and idempotent, then add an outbox table so invoice/reminder sends can
+  be retried safely without duplicate customer messages.
 - Move cron work into queue workers before splitting services.
 - Use idempotency keys for all message sends: invoice id, credit id plus reminder
   type, or OTP phone plus expiry bucket.
@@ -55,3 +56,17 @@ be extracted one at a time without rewriting the product.
   has just messaged the bot and an open session is guaranteed.
 - Track channel choice (`template`, `session`, `fallback`) in logs and later in a
   `MessageDelivery` table.
+
+## Implemented foundation
+
+`WhatsAppInboundEvent` now stores each Meta message ID with a database unique
+constraint before the webhook runs credit or repayment logic. Redis remains the
+fast duplicate guard, while PostgreSQL protects against Redis expiry, restarts,
+and repeated Meta deliveries. `WhatsAppDelivery` now records successful
+outbound sends and Meta provider message IDs at the shared outbound boundary.
+`WhatsAppOutboxMessage` now queues and retries scheduled vendor digests and
+organisation-backed payment reminders with an idempotency key;
+`/api/cron/whatsapp-outbox` dispatches pending work. Invoices, OTPs, and weekly
+reports can move onto the same queue incrementally. Admin template provisioning
+remains the source of truth for missing template setup; the outbox never
+bypasses the approved-template policy.

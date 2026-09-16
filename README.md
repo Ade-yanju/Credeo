@@ -83,10 +83,12 @@ Vodium Ledger gives vendors a 15-second way to log a credit, reminds students au
 - `vodium_otp` is required for first-time debtor verification codes
 - `vodium_payment_reminder` is required for reminders outside the 24-hour customer chat window
 - `vodium_invoice_pdf` is required for PDF invoice delivery outside the 24-hour customer chat window
+- `vodium_weekly_report`, `vodium_vendor_digest`, and `vodium_subscription_nudge` are required for scheduled vendor reports and subscription reminders
 - PDF invoice templates use a Meta `DOCUMENT` header, so auto-create requires `WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE`: the returned `h` value from Meta's Resumable Upload API for a sample PDF, not a public URL or media ID
 
 ### Automated Reminders (cron job)
 - External cron job calls `/api/cron/reminders` every 5 minutes with `Authorization: Bearer <CRON_SECRET>`
+- External cron job calls `/api/cron/whatsapp-outbox` every 5 minutes to retry queued template messages
 - Finds every outstanding credit whose adaptive reminder window is open
 - Sends WhatsApp reminders through open sessions or approved Meta templates when the customer is out of session
 - Stamps `reminderSentAt` to prevent duplicate sends
@@ -105,6 +107,8 @@ Vodium Ledger gives vendors a 15-second way to log a credit, reminds students au
 - Paystack webhook handler for `subscription.create`, `charge.success`, `subscription.disable`, `invoice.payment_failed`
 - Trial → Active → Past Due → Cancelled lifecycle fully handled
 - Trial period support with `trialEndsAt` field
+- Free-trial expiry is immediately read-only: vendors can view existing data but cannot create or change records until renewal
+- Account closure disables access immediately, retains records for 90 days for fraud/financial/legal review, then purges them through daily maintenance
 
 ### Data Model
 - `University`, `Vendor`, `Student`, `Credit`, `Repayment`, `CreditScoreEvent`
@@ -202,29 +206,37 @@ not yet APPROVED — not the code, and not your verification status.
 
 ### How this codebase handles it: deliver-then-upgrade
 
-A **delivered template re-opens the 24-hour window.** So rather than treating
-template-vs-rich as either/or, `src/lib/whatsapp/session-window.ts` does both:
+A **delivered template re-opens the 24-hour window.** Customer reminders,
+invoices, OTPs, and scheduled reports are template-only. Plain text is reserved
+for active conversational sessions. `src/lib/whatsapp/session-window.ts`
+supports both policies:
 
 | Customer state | What happens |
 | --- | --- |
 | Messaged us in the last 24h | Rich message sent directly (buttons, PDF, bank details) |
-| Out of session | **Template first** (re-opens the window) **→ then the rich message** inside it |
-| Template unusable | Free text, reported as `delivered: false` — it may be dropped |
+| Out of session conversation | **Template first** (re-opens the window) **→ then the rich message** inside it |
+| Scheduled reminder/invoice/OTP/report | Approved template only; no plain-text fallback |
+| Template unusable | `delivered: false`; no silent downgrade |
 
 The last row matters: the code no longer claims success for a send Meta will
 throw away. Logs carry `channel=` and `delivered=` so a cron run tells you what
 actually reached the customer.
 
-### The three templates
+### Required templates
 
 | Template | Category | Used for | Extra requirement |
 | --- | --- | --- | --- |
 | `vodium_otp` | AUTHENTICATION | Customer verification codes | Business Verification |
 | `vodium_payment_reminder` | UTILITY | Payment reminders | Business Verification |
+| `vodium_credit_logged` | UTILITY | Customer credit-created confirmation | Business Verification |
 | `vodium_invoice_pdf` | UTILITY | Invoice + PDF attachment | `WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE` |
+| `vodium_weekly_report` | UTILITY | Weekly PDF report | `WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE` |
+| `vodium_vendor_digest` | UTILITY | AI/fallback vendor digest | `WHATSAPP_VENDOR_DIGEST_TEMPLATE_NAME` |
+| `vodium_subscription_nudge` | UTILITY | Subscription/grace-period reminders | `WHATSAPP_SUBSCRIPTION_NUDGE_TEMPLATE_NAME` |
 
-All three auto-provision on first failure, or from Admin → WhatsApp bot. Check
-status there before assuming a code problem.
+All seven templates can be inspected and provisioned from the existing
+admin/template flow. They must be approved in Meta before their messages can
+be delivered. Check status there before assuming a code or delivery problem.
 
 **The invoice template needs one extra step.** Its DOCUMENT header requires a
 sample PDF uploaded through Meta's **Resumable Upload API**; set the returned
@@ -242,10 +254,10 @@ and the app keeps its existing deterministic behaviour.
 | Capability | Where | Behaviour |
 | --- | --- | --- |
 | Receipt OCR | `lib/whatsapp/receipt-intake.ts` | Customer photographs a transfer receipt; the bot reads amount/bank/reference and asks the vendor to confirm |
-| Bot understanding | `lib/whatsapp/ai-fallback.ts` | Runs **only** after the deterministic matcher gives up, so it can never regress existing commands |
+| Bot understanding | `lib/ai.ts`, `lib/whatsapp/ai-command.ts`, `lib/whatsapp/ai-fallback.ts` | Classifies natural-language commands and parses loose credit entries only after deterministic matching; routed actions return to the existing state machine |
 | Risk insight | `GET /api/bnpl/orders/[id]/insight` | Advisory only — **cannot** change an approve/decline decision |
 | Reminder copy | `lib/ai.ts` | Per-customer respectful wording (in-session only; out-of-session must use fixed templates) |
-| Vendor digest | `/api/cron/digest` | Weekly ledger summary on WhatsApp |
+| Vendor digest | `/api/cron/digest` | Weekly ledger summary through the approved `vodium_vendor_digest` WhatsApp template |
 
 **Safety model for OCR:** a receipt is a *claim*, never proof. OCR never marks a
 credit paid — it raises the same vendor-confirmation the existing `PAID` flow
@@ -277,6 +289,19 @@ npm run dev
 ```
 
 App runs at `http://localhost:3000`. Dev OTP codes print to terminal if WhatsApp is not configured.
+
+## Funding and operations documentation
+
+- [System overview](docs/system-overview.md) — how Vodium Ledger works across
+  onboarding, credit, repayment, WhatsApp, AI, scoring, payments, and admin.
+- [Tool catalogue](docs/tool-catalogue.md) — what each product and platform
+  service does, where it lives, and which configuration it needs.
+- [Funding demo and readiness checklist](docs/funding-demo-and-readiness.md) —
+  the investor demo flow and the evidence required before claiming pilot
+  readiness.
+- [WhatsApp template data specifications](docs/whatsapp-template-specifications.md) —
+  the exact runtime data used by `vodium_vendor_digest` and
+  `vodium_subscription_nudge`.
 
 ---
 
@@ -364,6 +389,7 @@ scripts/
 
 ### Data & Access Control
 - **Vendor data isolation** — vendor A cannot see vendor B's customers; every DB query scopes by `vendorId`. Student profile pages 404 if the authenticated vendor has no relationship with that student.
+- **Account retention** — `DELETE /api/vendor/me` closes the account immediately; the daily subscriptions maintenance job purges data after the 90-day retention window.
 - **Vodium Score clamped** — score is always kept within [0, 1000]; WhatsApp bot uses `Math.min(1000, Math.max(0, …))` on every update.
 - **NPS dismiss state in httpOnly cookie** — no localStorage; the 30-day cooldown can't be cleared by client-side scripts or XSS.
 - **Input validation with Zod** — all API routes validate with strict schemas; `vendorType` is validated via `z.enum` (not cast), preventing invalid enum injection.

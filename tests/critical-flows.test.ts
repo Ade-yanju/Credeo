@@ -269,6 +269,26 @@ test("INVARIANT a WhatsApp template name is rejected before it wastes API calls"
   assert.equal(normaliseTemplateName("!!!"), null);
 });
 
+test("INVARIANT scheduled outbound financial/report paths do not use plain text", () => {
+  const scheduledPaths = [
+    "src/lib/whatsapp/reminder-delivery.ts",
+    "src/lib/whatsapp/invoice-delivery.ts",
+    "src/lib/whatsapp/weekly-report-delivery.ts",
+    "src/lib/vendor-digest.ts",
+    "src/lib/subscription-nudge.ts",
+    "src/lib/otp-delivery.ts",
+  ];
+
+  for (const path of scheduledPaths) {
+    const source = readFileSync(path, "utf8");
+    assert.doesNotMatch(
+      source,
+      /sendWhatsAppMessage\(|sendWhatsAppDocument\(/,
+      `${path} must use an approved WhatsApp template for scheduled delivery`,
+    );
+  }
+});
+
 test("INVARIANT the cron endpoints an external scheduler calls still exist", () => {
   // Scheduling happens OUTSIDE this repo (cron-job.org), so these URLs are a
   // public contract. Renaming or moving one of these routes would stop that

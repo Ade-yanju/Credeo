@@ -6,19 +6,16 @@
  * promise — the vendor sees what their book is doing without opening a
  * dashboard they mostly don't open.
  *
- * WINDOW NOTE: digests go to VENDORS, who message the bot regularly, so they
- * normally land inside an open 24-hour session. We still check, and skip rather
- * than send into a closed window — a weekly nice-to-have does not justify
- * burning a template send, and a silently-dropped digest is worse than none.
- * (Reminders and invoices, which must arrive, use deliver-then-upgrade instead.)
+ * DELIVERY NOTE: scheduled digests use an approved utility template. They do
+ * not rely on a vendor having an open 24-hour session, and never fall back to
+ * plain text that Meta may silently drop.
  */
 
 import { prisma } from "@/lib/prisma";
 import { formatNaira } from "@/lib/utils";
 import { generateVendorDigest } from "@/lib/ai";
-import { sendWhatsAppMessage } from "@/lib/whatsapp/outbound";
-import { getOrgChannelCredentials } from "@/lib/whatsapp/channel-token";
-import { hasOpenSession } from "@/lib/whatsapp/session-window";
+import { resolveVendorDigestTemplateName } from "@/lib/whatsapp/vendor-digest-template";
+import { enqueueWhatsAppTemplate, dispatchWhatsAppOutboxMessage } from "@/lib/whatsapp/outbox";
 
 const OPEN_STATUSES = ["OUTSTANDING", "DUE_SOON", "OVERDUE", "PARTIALLY_PAID"] as const;
 
@@ -39,7 +36,7 @@ export async function sendWeeklyDigests(input?: { now?: Date }): Promise<DigestR
 
   const vendors = await prisma.vendor.findMany({
     where: { status: "ACTIVE" },
-    select: { id: true, phone: true, businessName: true, organizationId: true },
+    select: { id: true, phone: true, ownerName: true, businessName: true, organizationId: true },
   });
 
   let sent = 0;
@@ -94,12 +91,6 @@ export async function sendWeeklyDigests(input?: { now?: Date }): Promise<DigestR
         take: 5,
       });
 
-      // Only send where it will actually be delivered (see WINDOW NOTE above).
-      if (!(await hasOpenSession(vendor.phone, now))) {
-        skipped++;
-        continue;
-      }
-
       const body =
         (await generateVendorDigest({
           shopName: vendor.businessName,
@@ -111,8 +102,19 @@ export async function sendWeeklyDigests(input?: { now?: Date }): Promise<DigestR
           })),
         })) ?? fallbackDigest({ totalOutstanding, overdue, repaymentCount: repayments.length });
 
-      const creds = (await getOrgChannelCredentials(vendor.organizationId)) ?? undefined;
-      await sendWhatsAppMessage(vendor.phone, `📊 *Your week on Vodium Ledger*\n\n${body}`, creds);
+      const template = resolveVendorDigestTemplateName();
+      const firstName = vendor.ownerName.trim().split(/\s+/)[0] || vendor.ownerName;
+      const queued = await enqueueWhatsAppTemplate({
+        idempotencyKey: `vendor-digest:${vendor.id}:${weekAgo.toISOString().slice(0, 10)}`,
+        organizationId: vendor.organizationId,
+        recipient: vendor.phone,
+        kind: "TEMPLATE",
+        templateName: template,
+        languageCode: process.env.WHATSAPP_VENDOR_DIGEST_TEMPLATE_LANG ?? "en_US",
+        bodyParams: [firstName, body.slice(0, 900)],
+      });
+      const dispatchStatus = await dispatchWhatsAppOutboxMessage(queued.id);
+      if (dispatchStatus !== "SENT") throw new Error(`Digest outbox ${dispatchStatus.toLowerCase()}`);
       sent++;
     } catch (err) {
       console.error(`[digest] failed for vendor ${vendor.id}:`, err instanceof Error ? err.message : err);

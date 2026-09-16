@@ -247,11 +247,13 @@ export async function getFinance() {
 
   const lapsedVendors: LapsedVendorRow[] = lapsedSubs.map((sub) => {
     const entitlement = getEntitlement(sub, now);
-    // Prefer the observed event; fall back to the grace stamp so a row seeded by
-    // the migration still shows something rather than a blank.
+    // Prefer the observed event. Trial expiry stores the lockout timestamp at
+    // the trial end; paid lapses store the end of their grace window.
     const lapsedAt =
       lapsedAtByVendor.get(sub.vendorId) ??
-      (sub.graceEndsAt ? new Date(sub.graceEndsAt.getTime() - GRACE_DAYS * 86_400_000) : null);
+      (sub.status === "EXPIRED"
+        ? (sub.trialEndsAt ?? sub.graceEndsAt)
+        : (sub.graceEndsAt ? new Date(sub.graceEndsAt.getTime() - GRACE_DAYS * 86_400_000) : null));
 
     return {
       subscriptionId: sub.id,

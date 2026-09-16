@@ -35,7 +35,7 @@ export default function ServiceAgreementPage() {
       <p>The Organization extends credit to its customers and is solely responsible for credit decisions and lawful collection of amounts owed. Vodium provides reminders and reporting tools only and does not guarantee recovery.</p>
 
       <h2>7. If the Organization stops paying Vodium</h2>
-      <p>Stopping payment to Vodium does not affect amounts the Organization&rsquo;s customers owe the Organization. On termination, Vodium will make the Organization&rsquo;s data available for export for a reasonable period, then delete or de-identify it per the Privacy Policy and law.</p>
+      <p>Stopping payment to Vodium does not affect amounts the Organization&rsquo;s customers owe the Organization. On account closure, access is disabled immediately and Vodium retains the Organization&rsquo;s account and financial records for 90 days for fraud, reconciliation, dispute and legal review. After that period, the data is deleted or de-identified, subject to the Privacy Policy, law and active investigation holds.</p>
 
       <h2>8. Term and termination</h2>
       <p>Either party may terminate with notice. Vodium may suspend for breach, legal risk or security reasons.</p>

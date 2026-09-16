@@ -41,6 +41,10 @@ import {
   VOICE_LANG_ASKED_KEY,
 } from "../../../lib/whatsapp/voice-intake";
 import { rescueUnknownMessage } from "../../../lib/whatsapp/ai-fallback";
+import { understandWhatsAppCommand } from "../../../lib/ai";
+import { commandTextForAi } from "../../../lib/whatsapp/ai-command";
+import { claimInboundEvent } from "../../../lib/whatsapp/inbox";
+import { reconcileWhatsAppDelivery } from "../../../lib/whatsapp/delivery-log";
 import { getOrgChannelCredentials } from "../../../lib/whatsapp/channel-token";
 import { sendCreditLoggedNotification } from "../../../lib/whatsapp/credit-notification-delivery";
 import { getEntitlement } from "../../../lib/entitlement";
@@ -156,8 +160,9 @@ export async function GET(req: NextRequest) {
 // ── POST — incoming messages ───────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  // Always return 200 to Meta — any non-200 causes retries and webhook suspension.
-  // All errors are caught and logged; we never let an exception escape this handler.
+  // Normal processing returns 200 so Meta does not replay a handled event.
+  // The durable inbox has one deliberate exception: a 503 before processing
+  // asks Meta to retry when we cannot safely claim the event.
 
   const rawBody = await req.text();
 
@@ -255,6 +260,27 @@ export async function POST(req: NextRequest) {
   if (await isDuplicateMessage(message.id)) {
     console.log(`[whatsapp] duplicate ${message.id} ignored`);
     return NextResponse.json({ ok: true });
+  }
+
+  // Redis is the fast path, but it expires. Claim the event in PostgreSQL too
+  // so a duplicate webhook cannot replay a credit or repayment after a restart.
+  try {
+    const claimed = await claimInboundEvent({
+      messageId: message.id,
+      phone: fromPhone,
+      phoneNumberId,
+      messageType: message.type,
+      body: rawText,
+    });
+    if (!claimed) {
+      console.log(`[whatsapp] durable duplicate ${message.id} ignored`);
+      return NextResponse.json({ ok: true });
+    }
+  } catch (err) {
+    // Do not process financial actions if the durable dedupe store is down.
+    // A 503 asks Meta to retry; the next attempt can claim it safely.
+    console.error("[whatsapp] durable inbox claim failed:", err);
+    return NextResponse.json({ ok: false, retryable: true }, { status: 503 });
   }
 
   // ── Process message (wrapped so errors never escape) ────────────────────────
@@ -379,15 +405,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Lapsed accounts keep their data, their reads, and their ability to record
-    // money a customer actually paid — the same rule the API enforces (see
-    // ALLOWED_WHEN_LOCKED in lib/entitlement.ts). Everything that extends new
-    // credit or sends outbound messages pauses. In-progress paid flows are
-    // still reset, so a vendor cannot begin before expiry and finish after.
-    //
-    // GRACE is deliberately NOT blocked: getEntitlement keeps canWrite true for
-    // 7 days after the trial ends, so the bot stays fully usable while the
-    // vendor is being nudged to renew.
+    // Expired free-trial accounts keep their data and read commands only. Any
+    // in-progress mutation is reset, so a vendor cannot begin before expiry
+    // and finish after it. Paid subscriptions may still be in the separate
+    // payment grace window handled by getEntitlement().
     const subscription = await prisma.vendorSubscription.findUnique({ where: { vendorId: vendor.id } });
     const entitlement = getEntitlement(subscription);
     if (!entitlement.canWrite) {
@@ -399,21 +420,12 @@ export async function POST(req: NextRequest) {
         "SUPPORT", "AGENT", "HUMAN", "LIST", "SCORE", "UPGRADE", "RENEW", "CANCEL",
       ];
 
-      // The repayment flow has four entry shapes — "PAID", "PAID Chidi", the
-      // customer name typed while MARKING_PAID, and the confirm/dispute
-      // buttons. All of them must pass, or the vendor gets let in and then cut
-      // off mid-conversation, which is worse than a clean refusal.
-      const isRepayment =
-        firstWord === "PAID" ||
-        session.state === "MARKING_PAID" ||
-        /^(CONFIRM_PAID|NOT_PAID)_/i.test(messageText.trim());
-
       const isRead =
         READ_ONLY.includes(command) ||
         READ_ONLY.includes(firstWord) ||
         session.state === "LOOKING_UP_SCORE";
 
-      if (!isRepayment && !isRead) {
+      if (!isRead) {
         await prisma.whatsAppSession.update({
           where: { phone: fromPhone },
           data: { state: "IDLE", context: {} },
@@ -617,7 +629,7 @@ export async function POST(req: NextRequest) {
       vendorId: vendor?.id,
     };
 
-    const result = step(sessionCtx, { body: effectiveText, fromPhone });
+    let result = step(sessionCtx, { body: effectiveText, fromPhone });
 
     // Last-chance AI rescue. The deterministic matcher has already had its full
     // run (exact → phrase → keyword → typo) and given up, so this can only ever
@@ -649,6 +661,18 @@ export async function POST(req: NextRequest) {
           });
           await sendWhatsAppButtons(fromPhone, rescued.reply, rescued.buttons ?? [], creds);
           return NextResponse.json({ ok: true });
+        }
+
+        // If the message was not a credit entry, use the AI classifier to
+        // translate natural language into an existing safe command. We rerun
+        // the state machine rather than executing an AI instruction directly.
+        // This keeps all existing permissions, confirmation prompts, and side
+        // effects in one deterministic path.
+        const classified = await understandWhatsAppCommand({ message: effectiveText });
+        const routedText = classified ? commandTextForAi(classified) : null;
+        if (routedText) {
+          result = step(sessionCtx, { body: routedText, fromPhone });
+          console.log(`[whatsapp] AI routed intent=${classified?.intent} confidence=${classified?.confidence.toFixed(2)}`);
         }
       } catch (err) {
         // An AI hiccup must never break the bot — fall through to the normal
@@ -785,6 +809,7 @@ function logDeliveryStatuses(statuses: MetaMessageStatus[], phoneNumberId?: stri
     } else {
       console.log(base);
     }
+    reconcileWhatsAppDelivery({ providerMessageId: status.id, status: status.status });
   }
 }
 

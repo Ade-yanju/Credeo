@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getSessionPhone } from "@/lib/session";
+import { clearVendorSession, getSessionPhone } from "@/lib/session";
+import { ipFromRequest, writeAudit } from "@/lib/audit";
+import { scheduleVendorDeletion } from "@/lib/account-deletion";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 
 export async function GET() {
   const phone = getSessionPhone();
@@ -27,8 +30,11 @@ export async function PATCH(req: NextRequest) {
   const phone = getSessionPhone();
   if (!phone) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const vendor = await prisma.vendor.findUnique({ where: { phone } });
+  const vendor = await prisma.vendor.findUnique({ where: { phone }, include: { subscription: true } });
   if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
+
+  const denied = entitlementDenied(vendor.subscription, "tenant.write");
+  if (denied) return denied;
 
   const json = await req.json();
   const parsed = patchSchema.safeParse(json);
@@ -73,4 +79,40 @@ export async function PATCH(req: NextRequest) {
     console.error("[vendor/me]", err);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
+}
+
+// DELETE /api/vendor/me — disable the account now and retain its records for 90 days
+const deletionSchema = z.object({ confirm: z.literal(true) });
+
+export async function DELETE(req: NextRequest) {
+  const phone = getSessionPhone();
+  if (!phone) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const vendor = await prisma.vendor.findUnique({ where: { phone }, select: { id: true } });
+  if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
+
+  const parsed = deletionSchema.safeParse(await req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Confirm account deletion to continue." }, { status: 400 });
+  }
+
+  const deletion = await scheduleVendorDeletion(vendor.id);
+  if (!deletion) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
+
+  await writeAudit({
+    actorType: "vendor",
+    actorId: vendor.id,
+    action: "account.deletion_requested",
+    entityType: "Vendor",
+    entityId: vendor.id,
+    metadata: { retentionUntil: deletion.retentionUntil.toISOString() },
+    ipAddress: ipFromRequest(req),
+  });
+
+  clearVendorSession();
+  return NextResponse.json({
+    ok: true,
+    retentionUntil: deletion.retentionUntil.toISOString(),
+    message: "Your account has been closed. Your records will be securely retained for 90 days for fraud and legal review, then purged.",
+  });
 }

@@ -17,10 +17,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!hasTenantWriteAccess(ctx) || !ctx.organizationId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  // Logging a payment received against an invoice is the same event as a
-  // repayment, so it stays allowed after the trial lapses. The call is kept
-  // rather than omitted so the policy table stays the single source of truth —
-  // flip it there and this route obeys without being touched.
+  // Logging a payment received against an invoice is a business mutation.
+  // The policy table is the single source of truth, so expired trials are
+  // blocked here together with every other write endpoint.
   const denied = entitlementDenied(ctx.vendor.subscription, "invoice.payment");
   if (denied) return denied;
 

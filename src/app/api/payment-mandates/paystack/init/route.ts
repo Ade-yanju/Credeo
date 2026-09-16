@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { normalisePhone } from "@/lib/utils";
 import { hasTenantWriteAccess, requireTenantContext } from "@/lib/tenant-context";
+import { entitlementDenied } from "@/lib/entitlement-guard";
 
 const initSchema = z.object({
   customerPhone: z.string().min(7).max(30),
@@ -12,6 +13,8 @@ const initSchema = z.object({
 
 export async function POST(req: NextRequest) {
   const ctx = await requireTenantContext();
+  const denied = entitlementDenied(ctx.vendor.subscription, "mandate.write");
+  if (denied) return denied;
   if (!hasTenantWriteAccess(ctx)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }

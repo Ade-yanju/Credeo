@@ -72,8 +72,9 @@ export async function POST(req: NextRequest) {
       if (paystackCode && customerId && metadata.vendorId) {
         const sub = await prisma.vendorSubscription.findUnique({
           where: { vendorId: metadata.vendorId },
+          select: { id: true, paystackCustomerId: true, paystackSubscriptionCode: true, vendor: { select: { deletionRequestedAt: true } } },
         });
-        if (sub) {
+        if (sub && !sub.vendor.deletionRequestedAt) {
           await prisma.vendorSubscription.update({
             where: { id: sub.id },
             data: {
@@ -132,8 +133,9 @@ export async function POST(req: NextRequest) {
       if (paystackCode) {
         const sub = await prisma.vendorSubscription.findFirst({
           where: { paystackSubscriptionCode: paystackCode },
+          include: { vendor: { select: { deletionRequestedAt: true } } },
         });
-        if (sub) {
+        if (sub && !sub.vendor.deletionRequestedAt) {
           // A cancelled subscription still keeps whatever period was paid for,
           // then gets the standard grace window on top.
           const lapsesAt = sub.currentPeriodEnd && sub.currentPeriodEnd > new Date()
@@ -173,8 +175,9 @@ export async function POST(req: NextRequest) {
       if (paystackCode) {
         const sub = await prisma.vendorSubscription.findFirst({
           where: { paystackSubscriptionCode: paystackCode },
+          include: { vendor: { select: { deletionRequestedAt: true } } },
         });
-        if (sub) {
+        if (sub && !sub.vendor.deletionRequestedAt) {
           await prisma.vendorSubscription.update({
             where: { id: sub.id },
             data: {

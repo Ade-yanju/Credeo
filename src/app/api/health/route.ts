@@ -82,6 +82,23 @@ export async function GET() {
     checks.reminders = "unknown";
   }
 
+  // 5. Template outbox — scheduled messages must not sit pending forever.
+  try {
+    const staleBefore = new Date(Date.now() - 15 * 60 * 1000);
+    const stale = await prisma.whatsAppOutboxMessage.count({
+      where: {
+        OR: [
+          { status: "PENDING", availableAt: { lt: staleBefore } },
+          { status: "PROCESSING", updatedAt: { lt: staleBefore } },
+        ],
+      },
+    });
+    checks.whatsappOutbox = stale > 0 ? "stalled" : "ok";
+    if (stale > 0) healthy = false;
+  } catch {
+    checks.whatsappOutbox = "unknown";
+  }
+
   return NextResponse.json(
     { ok: healthy, checks, at: new Date().toISOString() },
     { status: healthy ? 200 : 503 },

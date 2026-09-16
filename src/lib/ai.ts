@@ -203,6 +203,67 @@ export async function parseAddCredit(input: {
 }
 
 /**
+ * Understand a vendor's free-form WhatsApp command.
+ *
+ * This is deliberately an interpreter, not an executor. The webhook maps the
+ * returned intent back into the existing deterministic state machine, where
+ * permissions, confirmations, and database side effects are enforced.
+ */
+export async function understandWhatsAppCommand(input: {
+  message: string;
+}): Promise<null | {
+  intent: "ADD" | "LIST" | "PAID" | "SCORE" | "INVOICE" | "DASHBOARD" | "SUPPORT" | "HELP" | "BANK" | "FREE_TEXT";
+  confidence: number;
+  customerQuery: string;
+}> {
+  if (!enabled()) return null;
+
+  const schema = {
+    type: "object" as const,
+    properties: {
+      intent: {
+        type: "string" as const,
+        enum: ["ADD", "LIST", "PAID", "SCORE", "INVOICE", "DASHBOARD", "SUPPORT", "HELP", "BANK", "FREE_TEXT"],
+      },
+      confidence: { type: "number" as const },
+      customerQuery: { type: "string" as const },
+    },
+    required: ["intent", "confidence", "customerQuery"],
+    additionalProperties: false as const,
+  };
+
+  try {
+    const response = await client.messages.parse({
+      model: CHEAP_MODEL,
+      max_tokens: 400,
+      system:
+        "You classify messages from registered Nigerian merchants using Vodium Ledger. " +
+        "Understand Nigerian English and Pidgin. Return only the closest command intent. " +
+        "Use customerQuery only when the message names a customer for PAID or SCORE. " +
+        "Never invent a customer name. Use FREE_TEXT when uncertain. This result will be " +
+        "passed to a confirmation-aware workflow; it is not permission to perform an action.",
+      messages: [{ role: "user", content: `Classify this WhatsApp message:\n"${input.message}"` }],
+      output_config: { format: { type: "json_schema", schema } },
+    });
+    const text = response.content.find((block) => block.type === "text")?.text;
+    const parsed = text ? extractJson<unknown>(text, null) : null;
+    if (!assertObject(parsed)) return null;
+
+    const intents = ["ADD", "LIST", "PAID", "SCORE", "INVOICE", "DASHBOARD", "SUPPORT", "HELP", "BANK", "FREE_TEXT"] as const;
+    if (!intents.includes(parsed.intent as typeof intents[number])) return null;
+
+    return {
+      intent: parsed.intent as typeof intents[number],
+      confidence: Math.max(0, Math.min(1, numberFrom(parsed.confidence, 0))),
+      customerQuery: typeof parsed.customerQuery === "string" ? parsed.customerQuery.trim().slice(0, 80) : "",
+    };
+  } catch (err) {
+    console.warn("[ai] understandWhatsAppCommand failed:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+/**
  * Suggest a repayment risk score (0–100) and the reasons behind it.
  * Higher = more likely to repay on time.
  */

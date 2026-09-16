@@ -51,6 +51,7 @@ export type AuditAction =
   | "coupon.created"
   // payments
   | "payment_mandate.created"
+  | "account.deletion_requested"
   // merchant acquisition
   | "acquisition.prospect_created"
   | "acquisition.prospect_updated"

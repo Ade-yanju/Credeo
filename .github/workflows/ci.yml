@@ -23,6 +23,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Validate Prisma schema
+        run: npx prisma validate
       - run: npx prisma generate
       - name: Unit tests
         run: npm test

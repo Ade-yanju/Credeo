@@ -230,12 +230,19 @@ async function handleVerify(json: unknown) {
 
 async function findVendorConflict(email: string, phone: string) {
   const existing = await prisma.vendor.findFirst({
-    where: { OR: [{ email }, { phone }] },
-    select: { email: true, phone: true },
+    where: {
+      OR: [
+        { email },
+        { phone },
+        { deletionOriginalEmail: email },
+        { deletionOriginalPhone: phone },
+      ],
+    },
+    select: { email: true, phone: true, deletionOriginalEmail: true, deletionOriginalPhone: true },
   });
   if (!existing) return null;
-  if (existing.email === email) return "email" as const;
-  if (existing.phone === phone) return "phone" as const;
+  if (existing.email === email || existing.deletionOriginalEmail === email) return "email" as const;
+  if (existing.phone === phone || existing.deletionOriginalPhone === phone) return "phone" as const;
   return "account" as const;
 }
 

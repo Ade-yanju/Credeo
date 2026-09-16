@@ -5,6 +5,7 @@ import { markOverdueInvoices, sendOverdueInvoiceReminders } from "@/lib/invoice-
 import { GRACE_DAYS } from "@/lib/entitlement";
 import { recordSubscriptionEvent } from "@/lib/subscription-events";
 import { sendGraceNudges } from "@/lib/subscription-nudge";
+import { purgeDeletedVendors } from "@/lib/account-deletion";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +23,10 @@ export async function GET(req: NextRequest) {
 
   const now = new Date();
 
+  // Account deletion is soft for 90 days, then permanently purged here as
+  // part of the existing daily maintenance job.
+  const retention = await purgeDeletedVendors(now);
+
   // 0. Credit lifecycle: mark new defaults and apply the daily default-score
   // decay. Guaranteed to run daily via this Vercel cron; idempotent if the
   // reminders cron already ran it today.
@@ -32,11 +37,11 @@ export async function GET(req: NextRequest) {
 
   // 1. Expire trials that have passed their end date.
   //
-  // Row-by-row rather than the old updateMany: each transition has to stamp
-  // its own graceEndsAt and write its own history row. `occurredAt` is the
-  // real trialEndsAt, NOT now — so a cron that runs late (or catches up after
-  // an outage) still records when the trial actually ended. That accuracy is
-  // the whole reason the event log exists.
+  // Row-by-row rather than the old updateMany: each transition writes its own
+  // history row. `occurredAt` is the real trialEndsAt, NOT now — so a cron
+  // that runs late still records when the trial actually ended. An expired
+  // free trial is read-only immediately, so its lockout timestamp is the
+  // trial end itself, not a post-trial grace date.
   const lapsingTrials = await prisma.vendorSubscription.findMany({
     where: { status: "TRIAL", trialEndsAt: { lt: now } },
     select: { id: true, vendorId: true, plan: true, monthlyAmount: true, trialEndsAt: true },
@@ -46,7 +51,7 @@ export async function GET(req: NextRequest) {
     const lapsedAt = sub.trialEndsAt ?? now;
     await prisma.vendorSubscription.update({
       where: { id: sub.id },
-      data: { status: "EXPIRED", graceEndsAt: new Date(lapsedAt.getTime() + GRACE_DAYS * DAY_MS) },
+      data: { status: "EXPIRED", graceEndsAt: lapsedAt },
     });
     await recordSubscriptionEvent({
       vendorId: sub.vendorId,
@@ -62,7 +67,8 @@ export async function GET(req: NextRequest) {
 
   // 2. Mark active subscriptions as PAST_DUE if currentPeriodEnd is passed.
   // Usually Paystack webhooks handle this; this is the safety net for missed
-  // or delayed webhooks. A failed payment gets the same grace as a trial.
+  // or delayed webhooks. A failed payment gets the paid-subscription grace
+  // window; free trials are locked immediately when they end.
   const lapsingActive = await prisma.vendorSubscription.findMany({
     where: { status: "ACTIVE", currentPeriodEnd: { lt: now } },
     select: { id: true, vendorId: true, plan: true, monthlyAmount: true, currentPeriodEnd: true },
@@ -110,7 +116,7 @@ export async function GET(req: NextRequest) {
         data: {
           vendorId: sub.vendorId,
           title: "Subscription Expired",
-          message: `Your free trial has ended. You have ${GRACE_DAYS} days of full access left — renew to keep adding credits and sending reminders.`,
+          message: "Your free trial has ended. Your records remain available to view, but changes are paused until you renew.",
           type: "WARNING",
         },
       });
@@ -127,6 +133,7 @@ export async function GET(req: NextRequest) {
     overdueSubs: lapsingActive.length,
     notificationsSent: expiredSubs.length,
     nudges,
+    retention,
     overdue,
     defaultDecay,
     invoices: { marked: overdueInvoices.marked, reminders: invoiceReminders },

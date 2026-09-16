@@ -16,7 +16,11 @@ interface OtpTemplateState {
   wabaId?: string;
   active?: { name: string; status: string; language: string };
   reminder?: { name: string; status?: string };
+  creditLogged?: { name: string; status?: string };
   invoice?: { name: string; status?: string; detail?: string };
+  weeklyReport?: { name: string; status?: string };
+  vendorDigest?: { name: string; status?: string };
+  subscriptionNudge?: { name: string; status?: string };
   detail?: string;
 }
 
@@ -58,12 +62,16 @@ export function OtpTemplatePanel() {
         : data.invoice?.detail
           ? ` Invoice PDF template: ${data.invoice.detail}`
           : "";
+      const scheduledNote = [data.creditLogged, data.weeklyReport, data.vendorDigest, data.subscriptionNudge]
+        .filter((item) => item?.created)
+        .map((item) => ` ${item.name} submitted too.`)
+        .join("");
       setMsg({
         ok: true,
         text:
           (data.created
             ? `Template "${data.resolvedName}" submitted — Meta usually approves it within minutes. OTP delivery starts automatically once approved.`
-            : `Template "${data.active?.name}" already exists (${data.active?.status}).`) + reminderNote + invoiceNote,
+            : `Template "${data.active?.name}" already exists (${data.active?.status}).`) + reminderNote + invoiceNote + scheduledNote,
       });
     } catch (err) {
       setMsg({ ok: false, text: err instanceof Error ? err.message : "Something went wrong" });
@@ -74,7 +82,11 @@ export function OtpTemplatePanel() {
 
   const status = state?.active?.status;
   const reminderStatus = state?.reminder?.status;
+  const creditLoggedStatus = state?.creditLogged?.status;
   const invoiceStatus = state?.invoice?.status;
+  const weeklyReportStatus = state?.weeklyReport?.status;
+  const vendorDigestStatus = state?.vendorDigest?.status;
+  const subscriptionNudgeStatus = state?.subscriptionNudge?.status;
   const reminderBadge =
     isTemplateUsable(reminderStatus) ? { cls: "bg-emerald-500/10 border-emerald-500/25 text-emerald-300", label: "Approved — reminders reach customers even without an open chat" }
     : reminderStatus === "PENDING" ? { cls: "bg-amber-500/10 border-amber-500/25 text-amber-300", label: "Reminder template pending Meta approval" }
@@ -89,7 +101,13 @@ export function OtpTemplatePanel() {
     isTemplateUsable(invoiceStatus) ? { cls: "bg-emerald-500/10 border-emerald-500/25 text-emerald-300", label: "Approved — invoice PDFs reach customers without an open chat" }
     : invoiceStatus === "PENDING" ? { cls: "bg-amber-500/10 border-amber-500/25 text-amber-300", label: "Invoice PDF template pending Meta approval" }
     : invoiceStatus ? { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: `Invoice PDF template: ${invoiceStatus}` }
-    : { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: "Invoice PDF template not created — out-of-chat customers get a link fallback" };
+    : { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: "Invoice PDF template not approved — invoice delivery is paused" };
+  const scheduledTemplates = [
+    { name: state?.creditLogged?.name, status: creditLoggedStatus, label: "Credit logged" },
+    { name: state?.weeklyReport?.name, status: weeklyReportStatus, label: "Weekly report" },
+    { name: state?.vendorDigest?.name, status: vendorDigestStatus, label: "Vendor digest" },
+    { name: state?.subscriptionNudge?.name, status: subscriptionNudgeStatus, label: "Subscription nudge" },
+  ];
 
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-vodium-charcoal p-5 md:p-6">
@@ -116,6 +134,26 @@ export function OtpTemplatePanel() {
       <div className={`rounded-lg border px-3 py-2 mb-4 text-xs ${invoiceBadge.cls}`}>
         {invoiceBadge.label}
         {state?.invoice?.name ? <span className="opacity-60"> · using &ldquo;{state.invoice.name}&rdquo;</span> : null}
+      </div>
+
+      <div className="space-y-2 mb-4">
+        {scheduledTemplates.map((item) => {
+          const usable = isTemplateUsable(item.status);
+          const pending = item.status === "PENDING";
+          return (
+            <div
+              key={item.label}
+              className={`rounded-lg border px-3 py-2 text-xs ${usable
+                ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-300"
+                : pending
+                  ? "bg-amber-500/10 border-amber-500/25 text-amber-300"
+                  : "bg-rose-500/10 border-rose-500/25 text-rose-300"}`}
+            >
+              {item.label}: {usable ? "Approved" : pending ? "Pending Meta approval" : "Not approved — scheduled delivery is paused"}
+              {item.name ? <span className="opacity-60"> · using &ldquo;{item.name}&rdquo;</span> : null}
+            </div>
+          );
+        })}
       </div>
 
       {state?.invoice?.detail && (
@@ -151,7 +189,7 @@ export function OtpTemplatePanel() {
         </div>
       )}
 
-      {(!isTemplateUsable(status) || !isTemplateUsable(reminderStatus) || !isTemplateUsable(invoiceStatus)) && (
+      {(!isTemplateUsable(status) || !isTemplateUsable(reminderStatus) || !isTemplateUsable(creditLoggedStatus) || !isTemplateUsable(invoiceStatus) || !isTemplateUsable(weeklyReportStatus) || !isTemplateUsable(vendorDigestStatus) || !isTemplateUsable(subscriptionNudgeStatus)) && (
         <button
           onClick={create}
           disabled={busy || !state?.configured}

@@ -2,16 +2,19 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionPhone } from "@/lib/session";
 import { markOverdueCredits } from "@/lib/credit-lifecycle";
+import { getEntitlement } from "@/lib/entitlement";
 
 // GET /api/customers — customers who have at least one credit with this vendor
 export async function GET() {
   const phone = getSessionPhone();
   if (!phone) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const vendor = await prisma.vendor.findUnique({ where: { phone } });
+  const vendor = await prisma.vendor.findUnique({ where: { phone }, include: { subscription: true } });
   if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
 
-  await markOverdueCredits({ vendorId: vendor.id });
+  if (getEntitlement(vendor.subscription).canWrite) {
+    await markOverdueCredits({ vendorId: vendor.id });
+  }
 
   const students = await prisma.student.findMany({
     where: { credits: { some: { vendorId: vendor.id } } },

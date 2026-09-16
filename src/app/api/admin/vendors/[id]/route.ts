@@ -3,6 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAdminSession } from "@/lib/session";
 import type { VendorStatus } from "@prisma/client";
+import { ipFromRequest, writeAudit } from "@/lib/audit";
+import { scheduleVendorDeletion } from "@/lib/account-deletion";
 
 const patchSchema = z.object({
   status: z.enum(["ACTIVE", "INACTIVE", "SUSPENDED"]),
@@ -30,6 +32,9 @@ export async function PATCH(
 
     const vendor = await prisma.vendor.findUnique({ where: { id: params.id } });
     if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
+    if (vendor.deletionRequestedAt) {
+      return NextResponse.json({ error: "This account is closed and pending retention purge." }, { status: 410 });
+    }
 
     const updated = await prisma.vendor.update({
       where: { id: params.id },
@@ -44,39 +49,42 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/admin/vendors/[id] — hard delete with cascade
+// DELETE /api/admin/vendors/[id] — close now, retain for 90 days, then purge
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = getAdminSession();
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!["SUPER_ADMIN", "CUSTOMER_CARE"].includes(session.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const vendor = await prisma.vendor.findUnique({
       where: { id: params.id },
-      select: { id: true, businessName: true, _count: { select: { credits: true } } },
+      select: { id: true, businessName: true },
     });
     if (!vendor) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
 
-    // Hard delete in FK-safe order inside a transaction
-    await prisma.$transaction([
-      // 1. Score events that reference this vendor's credits
-      prisma.creditScoreEvent.deleteMany({ where: { vendorId: params.id } }),
-      // 2. Notifications owned by this vendor
-      prisma.notification.deleteMany({ where: { vendorId: params.id } }),
-      // 3. Repayments for this vendor's credits
-      prisma.repayment.deleteMany({
-        where: { credit: { vendorId: params.id } },
-      }),
-      // 4. Credits
-      prisma.credit.deleteMany({ where: { vendorId: params.id } }),
-      // 5. Subscription
-      prisma.vendorSubscription.deleteMany({ where: { vendorId: params.id } }),
-      // 6. WhatsApp session (vendorId not FK but clean up anyway)
-      prisma.whatsAppSession.deleteMany({ where: { vendorId: params.id } }),
-      // 7. Vendor
-      prisma.vendor.delete({ where: { id: params.id } }),
-    ]);
+    const deletion = await scheduleVendorDeletion(vendor.id);
+    if (!deletion) return NextResponse.json({ error: "Vendor not found" }, { status: 404 });
 
-    return NextResponse.json({ ok: true, deleted: vendor.businessName });
+    await writeAudit({
+      actorType: "admin",
+      actorId: session.id,
+      action: "account.deletion_requested",
+      entityType: "Vendor",
+      entityId: vendor.id,
+      metadata: { retentionUntil: deletion.retentionUntil.toISOString(), businessName: vendor.businessName },
+      ipAddress: ipFromRequest(req),
+    });
+
+    return NextResponse.json({
+      ok: true,
+      closed: vendor.businessName,
+      retentionUntil: deletion.retentionUntil.toISOString(),
+    });
   } catch (err) {
     console.error("[admin/vendors/delete]", err);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });

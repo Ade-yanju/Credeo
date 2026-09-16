@@ -19,7 +19,7 @@ export function getStudentLimit(plan: SubscriptionPlan): number | null {
  * Now a thin delegate to getEntitlement() — the single authority (see
  * lib/entitlement.ts). Kept so the existing call sites (reminder cron, the
  * WhatsApp webhook, credit- and invoice-lifecycle) keep reading naturally,
- * and so they inherit the 7-day grace window for free.
+ * and so paid subscriptions inherit the 7-day grace window.
  *
  * BEHAVIOUR CHANGE: this used to return TRUE for a vendor with no
  * subscription row, which was an unlimited free pass. It now fails CLOSED.

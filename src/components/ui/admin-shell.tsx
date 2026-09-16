@@ -23,6 +23,7 @@ import {
   Megaphone,
   Target,
   Newspaper,
+  MessageSquare,
 } from "lucide-react";
 import type { AdminRole } from "@/lib/session";
 
@@ -63,6 +64,7 @@ const NAV_BY_ROLE: Record<
     { href: "/admin/acquisition", icon: Target, label: "Acquisition" },
     { href: "/admin/news", icon: Newspaper, label: "News" },
     { href: "/admin/analytics", icon: BarChart3, label: "Analytics" },
+    { href: "/admin/whatsapp-outbox", icon: MessageSquare, label: "WhatsApp outbox" },
     { href: "/admin/team", icon: Users, label: "Team" },
   ],
   CFO: [
@@ -79,12 +81,14 @@ const NAV_BY_ROLE: Record<
     { href: "/admin/vendors", icon: Store, label: "Vendors" },
     { href: "/admin/acquisition", icon: Target, label: "Acquisition" },
     { href: "/admin/news", icon: Newspaper, label: "News" },
+    { href: "/admin/whatsapp-outbox", icon: MessageSquare, label: "WhatsApp outbox" },
   ],
   ANALYTICS: [
     { href: "/admin", icon: LayoutDashboard, label: "Overview" },
     { href: "/admin/analytics", icon: BarChart3, label: "Analytics" },
     { href: "/admin/acquisition", icon: Target, label: "Acquisition" },
     { href: "/admin/news", icon: Newspaper, label: "News" },
+    { href: "/admin/whatsapp-outbox", icon: MessageSquare, label: "WhatsApp outbox" },
   ],
   MARKETING: [
     { href: "/admin", icon: LayoutDashboard, label: "Overview" },

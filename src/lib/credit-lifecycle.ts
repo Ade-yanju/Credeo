@@ -246,6 +246,8 @@ export async function sendOverdueReminders(scope: LifecycleScope & { force?: boo
       const creds = await credsFor(item.vendor.organizationId);
       await sendCustomerReminder({
         phone: item.student.phone,
+        organizationId: item.vendor.organizationId,
+        idempotencyKey: `overdue-reminder:${item.student.id}:${item.creditIds.join(",")}`,
         customerName: item.student.fullName,
         shopName: item.vendor.businessName,
         amountOwed: item.totalOwed,
@@ -360,6 +362,8 @@ export async function sendEscalations(scope: LifecycleScope = {}) {
     try {
       await sendCustomerReminder({
         phone: credit.student.phone,
+        organizationId: credit.vendor.organizationId,
+        idempotencyKey: `escalation-reminder:${credit.id}`,
         customerName: credit.student.fullName,
         shopName: credit.vendor.businessName,
         amountOwed: owed,

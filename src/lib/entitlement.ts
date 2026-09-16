@@ -21,7 +21,7 @@
 
 import type { SubscriptionStatus } from "@prisma/client";
 
-/** Days of full access after a subscription lapses, before the lockout bites. */
+/** Days of full access after a paid subscription lapses, before lockout. */
 export const GRACE_DAYS = 7;
 
 const DAY_MS = 86_400_000;
@@ -31,9 +31,9 @@ export type EntitlementState =
   | "TRIAL"
   /** Paying, inside the current period. */
   | "ACTIVE"
-  /** Lapsed, but inside the grace window — still full access, being warned. */
+  /** A paid subscription lapsed, but is inside the grace window. */
   | "GRACE"
-  /** Lapsed past grace — read-only apart from recording money received. */
+  /** Read-only. */
   | "LOCKED";
 
 /** The subscription fields entitlement actually reads. */
@@ -46,7 +46,7 @@ export type SubscriptionLike = {
 
 export interface Entitlement {
   state: EntitlementState;
-  /** True for TRIAL, ACTIVE and GRACE. False only when LOCKED. */
+  /** True for TRIAL, ACTIVE and paid GRACE. False when read-only. */
   canWrite: boolean;
   /** When the lockout bites. Null while the subscription has not lapsed. */
   graceEndsAt: Date | null;
@@ -87,28 +87,15 @@ export type EntitledAction =
 /**
  * What a LOCKED vendor may still do.
  *
- * The rule is: RECORDING MONEY ALREADY RECEIVED stays allowed; creating new
- * obligations does not. Repayment capture is the whole point of Phase 1 (see
- * CLAUDE.md's north star), and a vendor who cannot record a student's payment
- * either loses the record or writes it on paper — both destroy the data the
- * product exists to collect. Blocking it would also punish the student, whose
- * repayment history is the asset being built.
- *
- * That principle covers three endpoints, not just the obvious one: a plain
- * repayment, a repayment against a BNPL order, and a payment logged against
- * an invoice are all the same event wearing different clothes.
- *
- * One further exception, on security rather than data grounds: REVOKING staff
- * access stays allowed. Adding a team member is a paid feature, but refusing
- * to let a lapsed vendor remove a departed employee would hold an active
- * security risk open until they paid — billing pressure must never work that
- * way. Granting is gated; taking away is not.
+ * An expired free trial is strictly read-only. This is intentionally an empty
+ * allow-list: no new credits, invoices, repayments, messages, uploads, staff
+ * changes, or other mutations can be made until the vendor renews.
  */
 const ALLOWED_WHEN_LOCKED: Readonly<Record<EntitledAction, boolean>> = {
-  "repayment.create":       true,
-  "bnpl.repayment.create":  true,
-  "invoice.payment":        true,
-  "tenant.revoke":          true,
+  "repayment.create":       false,
+  "bnpl.repayment.create":  false,
+  "invoice.payment":        false,
+  "tenant.revoke":          false,
 
   "credit.create":          false,
   "credit.update":          false,
@@ -139,8 +126,7 @@ export function permits(entitlement: Entitlement, action: EntitledAction): boole
 /* ------------------------------------------------------------------ */
 
 /** Statuses that mean the subscription is no longer carrying the vendor. */
-const LAPSED_STATUSES: ReadonlySet<SubscriptionStatus> = new Set<SubscriptionStatus>([
-  "EXPIRED",
+const PAID_LAPSED_STATUSES: ReadonlySet<SubscriptionStatus> = new Set<SubscriptionStatus>([
   "PAST_DUE",
   "CANCELLED",
 ]);
@@ -163,27 +149,33 @@ export function getEntitlement(sub: SubscriptionLike, now: Date = new Date()): E
   }
 
   if (sub.status === "TRIAL") {
-    // A trial with no end date is a data bug, not a licence — treat the
-    // absence as "not yet ended" but let the cron stamp it.
+    // A free trial ends in read-only mode immediately. The cron changes the
+    // stored status to EXPIRED, but live requests must not wait for that job.
     if (!sub.trialEndsAt || sub.trialEndsAt >= now) {
       return { state: "TRIAL", canWrite: true, graceEndsAt: null, daysUntilLockout: null, lockedSince: null };
     }
-    return afterLapse(sub, sub.trialEndsAt, now);
+    return locked(sub.trialEndsAt);
   }
 
-  if (LAPSED_STATUSES.has(sub.status)) {
-    return afterLapse(sub, sub.trialEndsAt ?? sub.currentPeriodEnd, now);
+  if (sub.status === "EXPIRED") {
+    // EXPIRED represents a free trial that ended; it never receives paid
+    // subscription grace access.
+    return locked(sub.trialEndsAt ?? sub.graceEndsAt);
+  }
+
+  if (PAID_LAPSED_STATUSES.has(sub.status)) {
+    // Paid grace is derived from the paid period end only. A stale trial date
+    // must never turn a cancelled/expired free trial into paid grace access.
+    return afterLapse(sub, sub.currentPeriodEnd, now);
   }
 
   return locked(sub.graceEndsAt);
 }
 
 /**
- * Grace resolution. `graceEndsAt` is stamped by the cron at the moment of
- * lapse and is the authority. The derived fallback exists because a
- * subscription can lapse in real time between two cron runs — without it, a
- * vendor would be hard-locked for up to 24h and then handed a grace window,
- * which is worse than never having one.
+ * Grace resolution for paid subscriptions. `graceEndsAt` is stamped by the
+ * cron at the moment of lapse and is the authority. The derived fallback
+ * exists because a subscription can lapse in real time between two cron runs.
  */
 function afterLapse(sub: NonNullable<SubscriptionLike>, lapsedAt: Date | null, now: Date): Entitlement {
   const graceEndsAt =
@@ -218,12 +210,12 @@ function locked(graceEndsAt: Date | null): Entitlement {
 
 /**
  * The 403 body a blocked write returns. Nigerian English, no jargon, and it
- * names what still works so the vendor is not left guessing (CLAUDE.md:
- * "Speak Nigerian", and reminders/messaging are never shaming).
+ * names what stopped so the vendor is not left guessing (CLAUDE.md: "Speak
+ * Nigerian", and reminders/messaging are never shaming).
  */
 export function lockedMessage(action: EntitledAction): string {
   const noun = ACTION_NOUNS[action] ?? "this";
-  return `Your free trial has ended, so ${noun} is paused. Your records are safe and you can still view them and record money customers pay you. Renew your plan to unlock everything.`;
+  return `Your subscription access has ended, so ${noun} is paused. Your records are safe and available to view. Renew your plan to unlock changes.`;
 }
 
 const ACTION_NOUNS: Partial<Record<EntitledAction, string>> = {

@@ -259,7 +259,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="min-w-0">
                 <p className="text-[11px] font-bold text-rose-400 leading-tight">Read-only</p>
                 <p className="text-[10px] text-rose-400/60 mt-0.5 leading-snug">
-                  You can still view your book and record repayments.
+                  You can still view your book. Renew to make changes again.
                 </p>
                 <Link href="/dashboard/upgrade" className="text-[10px] text-rose-400/60 hover:text-rose-400 transition-colors mt-1 block font-medium underline underline-offset-2">
                   Renew subscription →
@@ -276,7 +276,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     : `${entitlement.daysUntilLockout} day${entitlement.daysUntilLockout === 1 ? "" : "s"} of full access left`}
                 </p>
                 <p className="text-[10px] text-amber-400/60 mt-0.5 leading-snug">
-                  Your trial ended. Renew to keep adding credit.
+                  Your paid access lapsed. Renew to keep making changes.
                 </p>
                 <Link href="/dashboard/upgrade" className="text-[10px] text-amber-400/60 hover:text-amber-400 transition-colors mt-1 block font-medium underline underline-offset-2">
                   Renew now →

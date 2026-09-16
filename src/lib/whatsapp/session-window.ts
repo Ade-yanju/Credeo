@@ -113,6 +113,34 @@ export interface DeliveryResult {
   templateIssue?: string;
 }
 
+/** Template-only delivery for invoices and scheduled reports. */
+export async function deliverTemplateOnly(input: {
+  phone: string;
+  sendTemplate: () => Promise<void>;
+  onTemplateUnusable?: (err: WhatsAppSendError) => Promise<void>;
+  now?: Date;
+}): Promise<DeliveryResult> {
+  try {
+    await input.sendTemplate();
+    await markWindowOpened(input.phone, input.now ?? new Date());
+    return { channel: "template-only", delivered: true };
+  } catch (err) {
+    if (isTemplateUnusable(err)) {
+      try {
+        await input.onTemplateUnusable?.(err);
+      } catch (hookErr) {
+        console.warn("[window] template-provision hook threw:", hookErr);
+      }
+      return {
+        channel: "template-only",
+        delivered: false,
+        templateIssue: `Meta ${err.code}: approved template required; no plain-text fallback was sent.`,
+      };
+    }
+    throw err;
+  }
+}
+
 /**
  * Deliver a message that must reach the customer regardless of session state.
  *

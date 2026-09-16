@@ -9,6 +9,8 @@
  *   WHATSAPP_PHONE_NUMBER_ID — phone number ID shown in the Meta WhatsApp dashboard
  */
 
+import { logWhatsAppDelivery } from "@/lib/whatsapp/delivery-log";
+
 const META_API_VERSION = "v19.0";
 
 /**
@@ -134,6 +136,8 @@ export async function sendWhatsAppMessage(
     console.error(`[WhatsApp outbound] Meta API error ${res.status}: ${err}`);
     throw new WhatsAppSendError(`WhatsApp outbound send failed: ${res.status}`, res.status, parseMetaErrorCode(err));
   }
+  const result = await res.json().catch(() => null) as { messages?: Array<{ id?: string }> } | null;
+  logWhatsAppDelivery({ recipient: to, phoneNumberId: phoneId, kind: "TEXT", providerMessageId: result?.messages?.[0]?.id });
 }
 
 export type WhatsAppButton = { id: string; title: string };
@@ -194,6 +198,8 @@ export async function sendWhatsAppButtons(
     console.error(`[WhatsApp buttons] Meta API error ${res.status}: ${err}`);
     throw new WhatsAppSendError(`WhatsApp buttons send failed: ${res.status}`, res.status, parseMetaErrorCode(err));
   }
+  const result = await res.json().catch(() => null) as { messages?: Array<{ id?: string }> } | null;
+  logWhatsAppDelivery({ recipient: to, phoneNumberId: phoneId, kind: "BUTTONS", providerMessageId: result?.messages?.[0]?.id });
 }
 
 export type WhatsAppListRow = { id: string; title: string; description?: string };
@@ -261,6 +267,8 @@ export async function sendWhatsAppList(
     console.error(`[WhatsApp list] Meta API error ${res.status}: ${err}`);
     throw new WhatsAppSendError(`WhatsApp list send failed: ${res.status}`, res.status, parseMetaErrorCode(err));
   }
+  const result = await res.json().catch(() => null) as { messages?: Array<{ id?: string }> } | null;
+  logWhatsAppDelivery({ recipient: to, phoneNumberId: phoneId, kind: "LIST", providerMessageId: result?.messages?.[0]?.id });
 }
 
 /**
@@ -309,6 +317,8 @@ export async function sendWhatsAppTemplate(
     console.error(`[WhatsApp template] Meta API error ${res.status}: ${err}`);
     throw new WhatsAppSendError(`WhatsApp template send failed: ${res.status}`, res.status, parseMetaErrorCode(err));
   }
+  const result = await res.json().catch(() => null) as { messages?: Array<{ id?: string }> } | null;
+  logWhatsAppDelivery({ recipient: to, phoneNumberId: phoneId, kind: "TEMPLATE", providerMessageId: result?.messages?.[0]?.id });
 }
 
 export async function sendWhatsAppDocument(
@@ -348,6 +358,8 @@ export async function sendWhatsAppDocument(
     console.error(`[WhatsApp document] Meta API error ${res.status}: ${err}`);
     throw new WhatsAppSendError(`WhatsApp document send failed: ${res.status}`, res.status, parseMetaErrorCode(err));
   }
+  const result = await res.json().catch(() => null) as { messages?: Array<{ id?: string }> } | null;
+  logWhatsAppDelivery({ recipient: to, phoneNumberId: phoneId, kind: "DOCUMENT", providerMessageId: result?.messages?.[0]?.id });
 }
 
 export async function sendWhatsAppDocumentTemplate(
@@ -396,4 +408,6 @@ export async function sendWhatsAppDocumentTemplate(
     console.error(`[WhatsApp document template] Meta API error ${res.status}: ${err}`);
     throw new WhatsAppSendError(`WhatsApp document template send failed: ${res.status}`, res.status, parseMetaErrorCode(err));
   }
+  const result = await res.json().catch(() => null) as { messages?: Array<{ id?: string }> } | null;
+  logWhatsAppDelivery({ recipient: to, phoneNumberId: phoneId, kind: "DOCUMENT_TEMPLATE", providerMessageId: result?.messages?.[0]?.id });
 }

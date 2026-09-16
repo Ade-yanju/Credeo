@@ -2,9 +2,8 @@
  * Entitlement, grace and weekly-report period tests.
  *
  * These lock down the decisions that money depends on: who is locked out, who
- * keeps access during grace, and — most importantly — that recording a customer's
- * repayment NEVER gets blocked. That last rule protects the repayment data the
- * whole product exists to collect, so it is the one most worth a regression test.
+ * keeps access during paid grace, and — most importantly — that an expired
+ * free trial cannot mutate the book.
  *
  * Only pure modules are imported (no prisma, no next/server), matching the rest
  * of the suite.
@@ -14,7 +13,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  GRACE_DAYS,
   getEntitlement,
   isAllowedWhenLocked,
   permits,
@@ -58,7 +56,7 @@ test("entitlement: ACTIVE with no period end is trusted (Paystack drives it)", (
   assert.equal(e.canWrite, true);
 });
 
-test("entitlement: lapsed trial inside the grace window keeps FULL access", () => {
+test("entitlement: an expired free trial is read-only immediately", () => {
   const e = getEntitlement(
     sub({
       status: "EXPIRED",
@@ -67,9 +65,9 @@ test("entitlement: lapsed trial inside the grace window keeps FULL access", () =
     }),
     NOW
   );
-  assert.equal(e.state, "GRACE");
-  assert.equal(e.canWrite, true);
-  assert.equal(e.daysUntilLockout, 5);
+  assert.equal(e.state, "LOCKED");
+  assert.equal(e.canWrite, false);
+  assert.equal(e.lockedSince?.toISOString(), new Date(NOW.getTime() - 2 * DAY).toISOString());
 });
 
 test("entitlement: past the grace window is LOCKED", () => {
@@ -90,7 +88,7 @@ test("entitlement: grace boundary is exclusive — at graceEndsAt you are locked
   assert.equal(e.state, "LOCKED");
 });
 
-test("entitlement: PAST_DUE gets the same grace cushion as a lapsed trial", () => {
+test("entitlement: PAST_DUE gets the paid-subscription grace cushion", () => {
   const e = getEntitlement(
     sub({
       status: "PAST_DUE",
@@ -103,16 +101,16 @@ test("entitlement: PAST_DUE gets the same grace cushion as a lapsed trial", () =
   assert.equal(e.canWrite, true);
 });
 
-test("entitlement: grace is derived when the cron has not stamped it yet", () => {
-  // A trial that lapsed an hour ago, before the daily cron next runs. Without
-  // the fallback this vendor would be hard-locked until the cron caught up.
+test("entitlement: an expired trial is locked before the cron stamps EXPIRED", () => {
+  // A trial that lapsed an hour ago must not remain writable until the daily
+  // cron catches up.
   const e = getEntitlement(
     sub({ status: "TRIAL", trialEndsAt: new Date(NOW.getTime() - 3600_000), graceEndsAt: null }),
     NOW
   );
-  assert.equal(e.state, "GRACE");
-  assert.equal(e.canWrite, true);
-  assert.equal(e.daysUntilLockout, GRACE_DAYS);
+  assert.equal(e.state, "LOCKED");
+  assert.equal(e.canWrite, false);
+  assert.equal(e.daysUntilLockout, 0);
 });
 
 test("entitlement: a trial with no end date is not treated as lapsed", () => {
@@ -136,20 +134,31 @@ test("entitlement: CANCELLED past grace is locked", () => {
   assert.equal(e.state, "LOCKED");
 });
 
-/* ── Action policy ────────────────────────────────────────────────────────── */
-
-test("policy: recording money received survives the lockout", () => {
-  // The north-star rule. If this ever flips, vendors go back to paper and the
-  // repayment history the product exists to build stops being collected.
-  assert.equal(isAllowedWhenLocked("repayment.create"), true);
-  assert.equal(isAllowedWhenLocked("bnpl.repayment.create"), true);
-  assert.equal(isAllowedWhenLocked("invoice.payment"), true);
+test("entitlement: CANCELLED without a paid period does not inherit trial grace", () => {
+  const e = getEntitlement(
+    sub({
+      status: "CANCELLED",
+      trialEndsAt: new Date(NOW.getTime() - 1 * DAY),
+      graceEndsAt: null,
+      currentPeriodEnd: null,
+    }),
+    NOW
+  );
+  assert.equal(e.state, "LOCKED");
+  assert.equal(e.canWrite, false);
 });
 
-test("policy: revoking staff access survives the lockout", () => {
-  // Never hold an active security risk open as billing pressure.
-  assert.equal(isAllowedWhenLocked("tenant.revoke"), true);
+/* ── Action policy ────────────────────────────────────────────────────────── */
+
+test("policy: an expired free trial cannot make any changes", () => {
+  for (const action of ["repayment.create", "bnpl.repayment.create", "invoice.payment", "tenant.revoke"] as const) {
+    assert.equal(isAllowedWhenLocked(action), false, `${action} must be blocked when read-only`);
+  }
+});
+
+test("policy: staff changes are also blocked when read-only", () => {
   assert.equal(isAllowedWhenLocked("tenant.write"), false);
+  assert.equal(isAllowedWhenLocked("tenant.revoke"), false);
 });
 
 test("policy: extending new credit does NOT survive the lockout", () => {
@@ -160,15 +169,15 @@ test("policy: extending new credit does NOT survive the lockout", () => {
   }
 });
 
-test("policy: permits() lets a locked vendor record a repayment but not add credit", () => {
+test("policy: permits() allows viewing but no mutation when locked", () => {
   const locked = getEntitlement(null, NOW);
-  assert.equal(permits(locked, "repayment.create"), true);
+  assert.equal(permits(locked, "repayment.create"), false);
   assert.equal(permits(locked, "credit.create"), false);
 });
 
 test("policy: everything is permitted while in grace", () => {
   const grace = getEntitlement(
-    sub({ status: "EXPIRED", graceEndsAt: new Date(NOW.getTime() + 3 * DAY) }),
+    sub({ status: "PAST_DUE", graceEndsAt: new Date(NOW.getTime() + 3 * DAY) }),
     NOW
   );
   assert.equal(permits(grace, "credit.create"), true);

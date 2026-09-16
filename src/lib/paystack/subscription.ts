@@ -32,6 +32,14 @@ export async function activateSubscriptionFromPaystackData(
   | { ok: true; plan: SubscriptionPlan }
   | { ok: false; error: string; status: number }
 > {
+  const account = await prisma.vendor.findUnique({
+    where: { id: vendorId },
+    select: { deletionRequestedAt: true },
+  });
+  if (!account || account.deletionRequestedAt) {
+    return { ok: false, error: "This account has been closed", status: 410 };
+  }
+
   if (data.status !== "success") {
     return { ok: false, error: "Payment was not successful", status: 402 };
   }

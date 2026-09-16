@@ -237,6 +237,13 @@ model Vendor {
   referredBy             Ambassador? @relation(fields: [referredByAmbassadorId], references: [id])
   inviteToken          String?   @unique  // set when a staff member is invited; cleared on accept
   inviteTokenExpiresAt DateTime?
+  // Account deletion is a soft action first: access is disabled immediately,
+  // while the account and its financial records remain available for the
+  // retention window required for fraud, disputes, and legal investigations.
+  deletionRequestedAt   DateTime?
+  dataRetentionUntil    DateTime?
+  deletionOriginalPhone String?
+  deletionOriginalEmail String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -258,6 +265,7 @@ model Vendor {
   @@index([branchId])
   @@index([phone])
   @@index([email])
+  @@index([dataRetentionUntil])
   @@index([referredByAmbassadorId])
 }
 
@@ -880,6 +888,93 @@ model WhatsAppSession {
   @@index([phone])
   @@index([organizationId])
   @@index([channelId])
+}
+
+/// Durable inbox record for Meta webhook events. Redis remains the fast
+/// duplicate guard, while this unique message id survives restarts and gives
+/// future background workers an auditable hand-off point.
+model WhatsAppInboundEvent {
+  id            String   @id @default(cuid())
+  messageId     String   @unique
+  phone         String
+  phoneNumberId String?
+  messageType   String
+  body          String?
+  receivedAt    DateTime @default(now())
+
+  @@index([phone, receivedAt])
+  @@index([phoneNumberId, receivedAt])
+}
+
+/// Provider-facing audit trail for outbound WhatsApp messages. This is the
+/// foundation for delivery-status reconciliation and the future outbox worker.
+model WhatsAppDelivery {
+  id                 String                 @id @default(cuid())
+  recipient          String
+  phoneNumberId      String?
+  kind               WhatsAppDeliveryKind
+  status             WhatsAppDeliveryStatus @default(SENT)
+  providerMessageId  String?                @unique
+  createdAt          DateTime               @default(now())
+
+  @@index([recipient, createdAt])
+  @@index([status, createdAt])
+  @@index([phoneNumberId, createdAt])
+}
+
+enum WhatsAppDeliveryKind {
+  TEXT
+  BUTTONS
+  LIST
+  TEMPLATE
+  DOCUMENT
+  DOCUMENT_TEMPLATE
+}
+
+enum WhatsAppDeliveryStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+/// Durable queue for template-based outbound WhatsApp work. The first caller
+/// is the scheduled vendor digest; reminders, invoices, OTPs, and reports can
+/// move here incrementally without changing their public delivery contracts.
+model WhatsAppOutboxMessage {
+  id             String                  @id @default(cuid())
+  idempotencyKey String                  @unique
+  organizationId String?
+  recipient      String
+  kind           WhatsAppOutboxKind
+  templateName   String
+  languageCode   String                  @default("en_US")
+  bodyParams     Json
+  documentLink   String?
+  filename       String?
+  status         WhatsAppOutboxStatus    @default(PENDING)
+  attempts       Int                     @default(0)
+  availableAt    DateTime                @default(now())
+  lastError      String?
+  sentAt         DateTime?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@index([status, availableAt])
+  @@index([organizationId, createdAt])
+  @@index([recipient, createdAt])
+}
+
+enum WhatsAppOutboxKind {
+  TEMPLATE
+  DOCUMENT_TEMPLATE
+}
+
+enum WhatsAppOutboxStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
 }
 
 enum WhatsAppState {

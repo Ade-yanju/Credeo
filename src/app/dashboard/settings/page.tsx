@@ -13,6 +13,8 @@ import {
   CreditCard,
   Lock,
   X,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import { GlowBadge } from "@/components/ui/glow-badge";
 import { AnimatedBorder } from "@/components/ui/animated-border";
@@ -39,6 +41,9 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showDeletion, setShowDeletion] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deletionError, setDeletionError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -73,6 +78,24 @@ export default function SettingsPage() {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    setDeleting(true);
+    setDeletionError(null);
+    try {
+      const res = await fetch("/api/vendor/me", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Could not close your account.");
+      window.location.replace("/login");
+    } catch (err) {
+      setDeletionError(err instanceof Error ? err.message : "Could not close your account.");
+      setDeleting(false);
     }
   }
 
@@ -355,12 +378,52 @@ export default function SettingsPage() {
                 Danger zone
               </h2>
               <p className="text-sm text-vodium-cream/35 mb-4 leading-relaxed">
-                Deleting your account will permanently remove all your credit
-                records and customer data. This cannot be undone.
+                Closing your account stops access immediately. We retain your
+                records for 90 days for fraud, financial, or legal review, then
+                securely purge them.
               </p>
-              <button className="text-sm text-rose-400 border border-rose-500/25 px-4 py-2 rounded-lg hover:bg-rose-500/5 transition-colors">
-                Request account deletion
+              <button
+                onClick={() => { setDeletionError(null); setShowDeletion(true); }}
+                className="text-sm text-rose-400 border border-rose-500/25 px-4 py-2 rounded-lg hover:bg-rose-500/5 transition-colors"
+              >
+                Close account
               </button>
+
+              {showDeletion && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+                  <div className="w-full max-w-md bg-vodium-charcoal border border-white/[0.08] rounded-2xl shadow-2xl p-6">
+                    <div className="flex items-start gap-3 mb-5">
+                      <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center flex-shrink-0">
+                        <AlertTriangle size={18} className="text-rose-400" />
+                      </div>
+                      <div>
+                        <h3 className="font-serif text-lg text-vodium-cream">Close your account?</h3>
+                        <p className="text-sm text-vodium-cream/45 mt-1 leading-relaxed">
+                          You will be signed out immediately. Your account and financial records will be retained securely for 90 days, then permanently purged.
+                        </p>
+                      </div>
+                    </div>
+                    {deletionError && <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-2.5 mb-4">{deletionError}</p>}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setShowDeletion(false)}
+                        disabled={deleting}
+                        className="flex-1 px-4 py-2.5 rounded-xl text-sm border border-white/[0.08] text-vodium-cream/50 hover:text-vodium-cream/80 transition-colors disabled:opacity-50"
+                      >
+                        Keep account
+                      </button>
+                      <button
+                        onClick={handleDeleteAccount}
+                        disabled={deleting}
+                        className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold bg-rose-600 hover:bg-rose-500 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {deleting ? <Loader2 size={14} className="animate-spin" /> : <AlertTriangle size={14} />}
+                        {deleting ? "Closing…" : "Close account"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

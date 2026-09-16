@@ -44,7 +44,7 @@ export default function TermsPage() {
       </p>
 
       <h2>6. Suspension and termination</h2>
-      <p>We may suspend or terminate accounts that breach these Terms or that present legal or security risk. You may stop using the Service at any time; certain records are retained as required by law.</p>
+      <p>We may suspend or terminate accounts that breach these Terms or that present legal or security risk. You may close your account at any time. Access is disabled immediately, records are retained for 90 days for fraud, financial, dispute and legal review, and then securely purged or de-identified unless a longer legal or investigation hold applies.</p>
 
       <h2>7. Disclaimers and liability</h2>
       <p>The Service is provided &ldquo;as is&rdquo;. To the extent permitted by law, Vodium is not liable for indirect or consequential losses, or for a store&rsquo;s decision to extend or recover credit. Nothing limits liability that cannot be excluded by law.</p>

@@ -119,8 +119,8 @@ export function getSessionPhone(): string | null {
 export async function getVendorSession(): Promise<VendorWithSub | null> {
   const phone = getSessionPhone();
   if (!phone) return null;
-  return prisma.vendor.findUnique({
-    where:   { phone },
+  return prisma.vendor.findFirst({
+    where: { phone, deletionRequestedAt: null },
     include: { subscription: true, community: true, organization: true, branch: true, memberships: true },
   });
 }
