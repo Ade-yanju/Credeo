@@ -33,6 +33,7 @@ export function commandTextForAi(input: {
     case "SUPPORT": return "SUPPORT";
     case "HELP": return "HELP";
     case "BANK": return "BANK";
-    case "FREE_TEXT": return null;
   }
+
+  return null;
 }
