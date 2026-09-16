@@ -73,8 +73,8 @@ letters, numbers, and underscores; for example, use
 | `vodium_credit_logged` | Utility | Text | Confirmation that a vendor logged a credit for a customer | Yes |
 | `vodium_invoice_pdf` | Utility | Document header + text | Customer invoice PDF delivery | Yes, requires a PDF header handle |
 | `vodium_weekly_report` | Utility | Document header + text | Vendor weekly report PDF | Yes, reuses the invoice PDF header handle |
-| `vodium_vendor_digest` | Utility | Text | Vendor's weekly ledger intelligence summary | Yes |
-| `vodium_subscription_nudge` | Utility | Text | Trial/grace-period and renewal notices | Yes |
+| `vodium_vendor_digest` | Marketing | Text | Vendor's weekly ledger intelligence summary | Yes |
+| `vodium_subscription_nudge` | Marketing | Text | Trial/grace-period and renewal notices | Yes |
 
 The application does not use a plain-text fallback for reminders, invoices,
 weekly reports, vendor digests, or subscription nudges when a template is
@@ -238,7 +238,7 @@ act without opening the dashboard.
 
 - Name: `vodium_vendor_digest`
 - Language: `en_US`
-- Category: `UTILITY`
+- Category: `MARKETING`
 - Header: none
 - Buttons: none required
 - Body:
@@ -272,7 +272,7 @@ Purpose: notify a vendor about trial expiry, grace-period timing, or renewal.
 
 - Name: `vodium_subscription_nudge`
 - Language: `en_US`
-- Category: `UTILITY`
+- Category: `MARKETING`
 - Header: none
 - Buttons: none required
 - Body:
@@ -295,23 +295,28 @@ Where it is used: `src/lib/subscription-nudge.ts`.
 
 ## 4. How to create them in Meta
 
-### Text Utility templates
+### Text templates
 
 Use this sequence for payment reminders, credit logged, vendor digest, and
-subscription nudge:
+subscription nudge. Select the category specified in the inventory above:
+
+- `UTILITY`: `vodium_payment_reminder`, `vodium_credit_logged`
+- `MARKETING`: `vodium_vendor_digest`, `vodium_subscription_nudge`
 
 1. Open Meta Business Suite → WhatsApp Manager → Message Templates.
 2. Select the WABA that owns Vodium's sending number.
 3. Select **Create template**.
-4. Choose **Utility** as the category.
+4. Choose the category specified in section 3:
+   - **Utility** for `vodium_payment_reminder` and `vodium_credit_logged`.
+   - **Marketing** for `vodium_vendor_digest` and `vodium_subscription_nudge`.
 5. Enter the exact lowercase template name.
 6. Choose `English (US)` / `en_US`.
 7. Add a Body component only.
 8. Paste the exact body from section 3.
 9. Insert variables in the same order shown in the table.
 10. Add the example values for every variable in one complete example row.
-11. Do not add marketing claims, promotional links, extra buttons, or a
-    different variable order.
+11. Do not add extra text, promotional links, extra buttons, or a different
+    variable order.
 12. Submit for review and wait for `APPROVED`.
 
 The application can send only after Meta has approved the template. `PENDING`

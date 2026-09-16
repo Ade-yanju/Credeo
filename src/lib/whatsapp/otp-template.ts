@@ -199,7 +199,10 @@ export async function listOtpTemplates(): Promise<OtpTemplateStatus> {
   let nextUrl: string | undefined = `${GRAPH}/${waba.id}/message_templates?fields=name,status,language,category&limit=100`;
 
   while (nextUrl) {
-    const res = await fetch(nextUrl, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(nextUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
     const json = (await res.json().catch(() => ({}))) as {
       data?: Array<{ name: string; status: string; language: string; category: string }>;
       paging?: { next?: string };
@@ -401,7 +404,7 @@ export async function ensureCreditLoggedTemplate(input: {
   return { name: input.name, status: json.status ?? "PENDING", created: true };
 }
 
-/** Create the scheduled vendor-digest UTILITY template if it does not exist. */
+/** Create the scheduled vendor-digest MARKETING template if it does not exist. */
 export async function ensureVendorDigestTemplate(input: {
   name: string;
 }): Promise<{ name: string; status?: string; created: boolean; detail?: string }> {
@@ -426,7 +429,7 @@ export async function ensureVendorDigestTemplate(input: {
     body: JSON.stringify({
       name: input.name,
       language: "en_US",
-      category: "UTILITY",
+      category: "MARKETING",
       components: [{
         type: "BODY",
         text: "Hi {{1}}, here is your Vodium Ledger summary:\n\n{{2}}",
@@ -452,7 +455,7 @@ export async function ensureVendorDigestTemplate(input: {
   return { name: input.name, status: json.status ?? "PENDING", created: true };
 }
 
-/** Create the subscription/grace-period UTILITY template if it is missing. */
+/** Create the subscription/grace-period MARKETING template if it is missing. */
 export async function ensureSubscriptionNudgeTemplate(input: {
   name: string;
 }): Promise<{ name: string; status?: string; created: boolean; detail?: string }> {
@@ -477,7 +480,7 @@ export async function ensureSubscriptionNudgeTemplate(input: {
     body: JSON.stringify({
       name: input.name,
       language: "en_US",
-      category: "UTILITY",
+      category: "MARKETING",
       components: [{
         type: "BODY",
         text: "Hi {{1}}, {{2}}",

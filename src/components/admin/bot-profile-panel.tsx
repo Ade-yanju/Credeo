@@ -15,17 +15,18 @@ interface OtpTemplateState {
   resolvedName: string;
   wabaId?: string;
   active?: { name: string; status: string; language: string };
-  reminder?: { name: string; status?: string };
-  creditLogged?: { name: string; status?: string };
-  invoice?: { name: string; status?: string; detail?: string };
-  weeklyReport?: { name: string; status?: string };
-  vendorDigest?: { name: string; status?: string };
-  subscriptionNudge?: { name: string; status?: string };
+  reminder?: { name: string; status?: string; language?: string; category?: string };
+  creditLogged?: { name: string; status?: string; language?: string; category?: string };
+  invoice?: { name: string; status?: string; language?: string; category?: string; detail?: string };
+  weeklyReport?: { name: string; status?: string; language?: string; category?: string };
+  vendorDigest?: { name: string; status?: string; language?: string; category?: string };
+  subscriptionNudge?: { name: string; status?: string; language?: string; category?: string };
   detail?: string;
 }
 
 function isTemplateUsable(status?: string): boolean {
-  return status === "APPROVED" || status === "ACTIVE";
+  const normalized = status?.trim().toUpperCase() ?? "";
+  return normalized === "APPROVED" || normalized === "ACTIVE" || normalized.startsWith("ACTIVE ") || normalized.startsWith("ACTIVE-") || normalized.startsWith("ACTIVE_");
 }
 
 /**
@@ -38,7 +39,7 @@ export function OtpTemplatePanel() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = () =>
-    fetch("/api/admin/whatsapp-otp-template")
+    fetch("/api/admin/whatsapp-otp-template", { cache: "no-store" })
       .then((r) => r.json())
       .then(setState)
       .catch(() => {});
@@ -103,10 +104,10 @@ export function OtpTemplatePanel() {
     : invoiceStatus ? { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: `Invoice PDF template: ${invoiceStatus}` }
     : { cls: "bg-rose-500/10 border-rose-500/25 text-rose-300", label: "Invoice PDF template not approved — invoice delivery is paused" };
   const scheduledTemplates = [
-    { name: state?.creditLogged?.name, status: creditLoggedStatus, label: "Credit logged" },
-    { name: state?.weeklyReport?.name, status: weeklyReportStatus, label: "Weekly report" },
-    { name: state?.vendorDigest?.name, status: vendorDigestStatus, label: "Vendor digest" },
-    { name: state?.subscriptionNudge?.name, status: subscriptionNudgeStatus, label: "Subscription nudge" },
+    { name: state?.creditLogged?.name, status: creditLoggedStatus, language: state?.creditLogged?.language, category: state?.creditLogged?.category, label: "Credit logged" },
+    { name: state?.weeklyReport?.name, status: weeklyReportStatus, language: state?.weeklyReport?.language, category: state?.weeklyReport?.category, label: "Weekly report" },
+    { name: state?.vendorDigest?.name, status: vendorDigestStatus, language: state?.vendorDigest?.language, category: state?.vendorDigest?.category, label: "Vendor digest" },
+    { name: state?.subscriptionNudge?.name, status: subscriptionNudgeStatus, language: state?.subscriptionNudge?.language, category: state?.subscriptionNudge?.category, label: "Subscription nudge" },
   ];
 
   return (
@@ -151,6 +152,7 @@ export function OtpTemplatePanel() {
             >
               {item.label}: {usable ? "Approved" : pending ? "Pending Meta approval" : "Not approved — scheduled delivery is paused"}
               {item.name ? <span className="opacity-60"> · using &ldquo;{item.name}&rdquo;</span> : null}
+              {item.language ? <span className="opacity-60"> · {item.language}{item.category ? ` · ${item.category}` : ""}</span> : null}
             </div>
           );
         })}

@@ -231,8 +231,8 @@ actually reached the customer.
 | `vodium_credit_logged` | UTILITY | Customer credit-created confirmation | Business Verification |
 | `vodium_invoice_pdf` | UTILITY | Invoice + PDF attachment | `WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE` |
 | `vodium_weekly_report` | UTILITY | Weekly PDF report | `WHATSAPP_INVOICE_TEMPLATE_HEADER_HANDLE` |
-| `vodium_vendor_digest` | UTILITY | AI/fallback vendor digest | `WHATSAPP_VENDOR_DIGEST_TEMPLATE_NAME` |
-| `vodium_subscription_nudge` | UTILITY | Subscription/grace-period reminders | `WHATSAPP_SUBSCRIPTION_NUDGE_TEMPLATE_NAME` |
+| `vodium_vendor_digest` | MARKETING | AI/fallback vendor digest | `WHATSAPP_VENDOR_DIGEST_TEMPLATE_NAME` |
+| `vodium_subscription_nudge` | MARKETING | Subscription/grace-period reminders | `WHATSAPP_SUBSCRIPTION_NUDGE_TEMPLATE_NAME` |
 
 All seven templates can be inspected and provisioned from the existing
 admin/template flow. They must be approved in Meta before their messages can

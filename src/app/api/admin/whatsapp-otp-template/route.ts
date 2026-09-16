@@ -33,7 +33,29 @@ function findTemplate(
   name: string,
 ) {
   const target = normalizeTemplateName(name);
-  return templates.find((template) => normalizeTemplateName(template.name) === target);
+  return templates
+    .filter((template) => normalizeTemplateName(template.name) === target)
+    .sort((a, b) => templateStatusRank(b.status) - templateStatusRank(a.status))[0];
+}
+
+function templateStatusRank(status?: string): number {
+  const normalized = status?.trim().toUpperCase() ?? "";
+  if (normalized === "APPROVED" || normalized === "ACTIVE" || normalized.startsWith("ACTIVE ") || normalized.startsWith("ACTIVE-") || normalized.startsWith("ACTIVE_")) return 3;
+  if (normalized === "PENDING") return 2;
+  return 1;
+}
+
+function templateState(
+  templates: Array<{ name: string; status: string; language: string; category: string }>,
+  name: string,
+) {
+  const template = findTemplate(templates, name);
+  return {
+    name,
+    status: template?.status,
+    language: template?.language,
+    category: template?.category,
+  };
 }
 
 // GET — required platform templates and whether each exists/is approved.
@@ -55,12 +77,12 @@ export async function GET() {
   const subscriptionNudgeName = resolveSubscriptionNudgeTemplateName();
   return NextResponse.json({
     ...status,
-    reminder: { name: reminderName, status: reminderTemplate?.status },
-    creditLogged: { name: creditLoggedName, status: creditLoggedTemplate?.status },
-    invoice: { name: invoiceName, status: invoiceTemplate?.status, detail: invoiceDetail },
-    weeklyReport: { name: weeklyReportName, status: findTemplate(status.templates, weeklyReportName)?.status },
-    vendorDigest: { name: vendorDigestName, status: findTemplate(status.templates, vendorDigestName)?.status },
-    subscriptionNudge: { name: subscriptionNudgeName, status: findTemplate(status.templates, subscriptionNudgeName)?.status },
+    reminder: { name: reminderName, status: reminderTemplate?.status, language: reminderTemplate?.language, category: reminderTemplate?.category },
+    creditLogged: { name: creditLoggedName, status: creditLoggedTemplate?.status, language: creditLoggedTemplate?.language, category: creditLoggedTemplate?.category },
+    invoice: { name: invoiceName, status: invoiceTemplate?.status, language: invoiceTemplate?.language, category: invoiceTemplate?.category, detail: invoiceDetail },
+    weeklyReport: templateState(status.templates, weeklyReportName),
+    vendorDigest: templateState(status.templates, vendorDigestName),
+    subscriptionNudge: templateState(status.templates, subscriptionNudgeName),
   });
 }
 
