@@ -16,6 +16,7 @@ import {
   Copy,
   X,
 } from "lucide-react";
+import { AdminDialog } from "@/components/ui/admin-dialog";
 
 interface VendorRow {
   id: string;
@@ -66,12 +67,17 @@ export default function SupportPage() {
   const [blasting, setBlasting] = useState(false);
   const [blastResult, setBlastResult] = useState<string | null>(null);
   const [showProspectForm, setShowProspectForm] = useState(false);
+  const [showBlastConfirmation, setShowBlastConfirmation] = useState(false);
 
   // Customer care's manual lever: re-send WhatsApp reminders to every overdue
   // customer right now, ignoring the 3-day repeat interval.
   const blastReminders = async () => {
     if (blasting) return;
-    if (!window.confirm("Send a WhatsApp reminder to EVERY customer with an overdue credit now?")) return;
+    setShowBlastConfirmation(true);
+  };
+
+  const confirmBlastReminders = async () => {
+    setShowBlastConfirmation(false);
     setBlasting(true);
     setBlastResult(null);
     try {
@@ -184,6 +190,8 @@ export default function SupportPage() {
           {blastResult}
         </div>
       )}
+
+      {showBlastConfirmation && <AdminDialog title="Send overdue reminders?" message="This will send a WhatsApp reminder to every customer with an overdue credit right now." confirmLabel="Send reminders" onConfirm={confirmBlastReminders} onClose={() => setShowBlastConfirmation(false)} />}
 
       {showProspectForm && <ProspectForm onClose={() => { setShowProspectForm(false); loadVendors(); }} />}
 

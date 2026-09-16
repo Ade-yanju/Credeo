@@ -2,9 +2,16 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { AdminDialog } from "@/components/ui/admin-dialog";
 
 type VendorOption = { id: string; businessName: string; phone: string; email: string };
 type AdminOption = { id: string; name: string };
+type DialogState = {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  onConfirm?: () => void | Promise<void>;
+};
 
 // The prospect arrives JSON-serialised from the server page, so every DateTime
 // on the Prisma row reaches us as a string and enums as their string values.
@@ -48,6 +55,7 @@ export function AcquisitionDetailClient({ prospect, admins, canWrite }: { prospe
   const [vendors, setVendors] = useState<VendorOption[]>([]);
   const [vendorQuery, setVendorQuery] = useState("");
   const [searchMessage, setSearchMessage] = useState("");
+  const [dialog, setDialog] = useState<DialogState | null>(null);
   const closed = prospect.stage === "LOST" || prospect.stage === "UNQUALIFIED" || prospect.stage === "WON";
 
   async function request(path: string, body?: unknown) {
@@ -61,7 +69,10 @@ export function AcquisitionDetailClient({ prospect, admins, canWrite }: { prospe
     for (const [key, value] of Object.entries(body)) if (value === "") delete body[key];
     if (typeof body.nextActionAt === "string") body.nextActionAt = new Date(body.nextActionAt).toISOString();
     const res = await request("/activities", body);
-    if (!res.ok) return window.alert((await res.json()).error ?? "Could not save");
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return setDialog({ title: "Could not save activity", message: data.error ?? "Please try again." });
+    }
     window.location.reload();
   }
   async function updatePipeline(form: HTMLFormElement) {
@@ -72,19 +83,39 @@ export function AcquisitionDetailClient({ prospect, admins, canWrite }: { prospe
     setBusy(true);
     const res = await fetch(`/api/admin/acquisition/prospects/${prospect.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     setBusy(false);
-    if (!res.ok) return window.alert((await res.json()).error ?? "Could not update pipeline");
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return setDialog({ title: "Could not update pipeline", message: data.error ?? "Please try again." });
+    }
     window.location.reload();
   }
   async function registrationLink() {
     const res = await request("/convert"); const data = await res.json();
-    if (!res.ok) return window.alert(data.error ?? "Could not create link");
-    await navigator.clipboard.writeText(data.registrationUrl); window.alert("Registration link copied.");
+    if (!res.ok) return setDialog({ title: "Could not create link", message: data.error ?? "Please try again." });
+    try {
+      await navigator.clipboard.writeText(data.registrationUrl);
+      setDialog({ title: "Registration link copied", message: "The registration link is ready to send to the prospect." });
+    } catch {
+      setDialog({ title: "Link created", message: data.registrationUrl });
+    }
   }
   async function claimLink() {
-    if (!window.confirm("Create a 30-day claim link? The merchant will choose their password and complete the remaining onboarding details.")) return;
-    const res = await request("/convert", { claimable: true }); const data = await res.json();
-    if (!res.ok) return window.alert(data.error ?? "Could not create claim link");
-    await navigator.clipboard.writeText(data.claimUrl); window.alert("Claim link copied.");
+    setDialog({
+      title: "Create a 30-day claim link?",
+      message: "The merchant will choose their password and complete the remaining onboarding details.",
+      confirmLabel: "Create link",
+      onConfirm: async () => {
+        setDialog(null);
+        const res = await request("/convert", { claimable: true }); const data = await res.json();
+        if (!res.ok) return setDialog({ title: "Could not create claim link", message: data.error ?? "Please try again." });
+        try {
+          await navigator.clipboard.writeText(data.claimUrl);
+          setDialog({ title: "Claim link copied", message: "The claim link is ready to send to the prospect." });
+        } catch {
+          setDialog({ title: "Claim link created", message: data.claimUrl });
+        }
+      },
+    });
   }
   async function searchVendors() {
     const params = new URLSearchParams();
@@ -98,10 +129,21 @@ export function AcquisitionDetailClient({ prospect, admins, canWrite }: { prospe
     setVendors(data.vendors); setSearchMessage(data.vendors.length ? "" : "No matching vendor found.");
   }
   async function match(vendorId: string) {
-    if (!vendorId || !window.confirm("Link this existing vendor? Accounts will not be merged or changed.")) return;
-    const res = await request("/convert", { vendorId });
-    if (!res.ok) return window.alert((await res.json()).error ?? "Could not link");
-    window.location.reload();
+    if (!vendorId) return;
+    setDialog({
+      title: "Link this existing vendor?",
+      message: "Accounts will not be merged or changed.",
+      confirmLabel: "Link vendor",
+      onConfirm: async () => {
+        setDialog(null);
+        const res = await request("/convert", { vendorId });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          return setDialog({ title: "Could not link vendor", message: data.error ?? "Please try again." });
+        }
+        window.location.reload();
+      },
+    });
   }
 
   return <div className="p-5 md:p-8 max-w-5xl mx-auto space-y-6">
@@ -111,6 +153,7 @@ export function AcquisitionDetailClient({ prospect, admins, canWrite }: { prospe
     {canWrite && (prospect.stage === "LOST" || prospect.stage === "UNQUALIFIED") ? <ReopenForm admins={admins} busy={busy} submit={updatePipeline} /> : canWrite && <PipelineForm prospect={prospect} admins={admins} busy={busy} submit={updatePipeline} />}
     {canWrite && <section className="surface-card p-5 space-y-3"><h2 className="font-semibold">Conversion</h2>{prospect.convertedVendor ? <p className="text-sm text-emerald-400">Linked to {prospect.convertedVendor.businessName}. Credits: {prospect.convertedVendor._count.credits}; subscription: {prospect.convertedVendor.subscription?.status ?? "none"}.</p> : <><div className="flex flex-wrap gap-2"><button type="button" onClick={registrationLink} disabled={busy} className="btn-gold inline-flex h-10 items-center rounded-lg px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60">Copy registration link</button><button type="button" onClick={claimLink} disabled={busy || !prospect.phone || !prospect.email} title={!prospect.phone || !prospect.email ? "A verified phone and email are required" : undefined} className="btn-ghost inline-flex h-10 items-center rounded-lg px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45">Create claimable account</button></div><p className="text-xs text-vodium-cream/45">A claimable account is a 30-day link for the merchant to set a password and finish onboarding. Verify public contact details before sending it.</p><div className="flex gap-2"><input value={vendorQuery} onChange={(event) => setVendorQuery(event.target.value)} placeholder="Business name if no exact contact match" className="input-dark rounded-lg px-3 py-2 text-sm flex-1" /><button type="button" onClick={searchVendors} disabled={busy} className="btn-ghost h-10 rounded-lg px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45">Search vendors</button></div>{searchMessage && <p className="text-xs text-vodium-cream/45">{searchMessage}</p>}{vendors.length > 0 && <div className="flex gap-2"><select id="vendor-match" className="input-dark rounded-lg px-3 py-2 text-sm flex-1"><option value="">Confirm a matching vendor…</option>{vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.businessName} · {vendor.phone}</option>)}</select><button type="button" onClick={() => match((document.getElementById("vendor-match") as HTMLSelectElement).value)} className="btn-ghost h-10 rounded-lg px-4 text-sm font-semibold">Confirm match</button></div>}</>}</section>}
     <section className="grid lg:grid-cols-2 gap-5"><div className="surface-card p-5"><h2 className="font-semibold mb-4">Activity timeline</h2>{prospect.activities.length ? prospect.activities.map((activity: ProspectActivity) => <div key={activity.id} className="border-l border-vodium-gold/30 pl-3 pb-4"><p className="text-sm text-vodium-cream">{label(activity.type)} {activity.outcome && `· ${activity.outcome}`}</p>{activity.body && <p className="text-xs text-vodium-cream/45 mt-1">{activity.body}</p>}<p className="text-[10px] text-vodium-cream/30 mt-1">{new Date(activity.occurredAt).toLocaleString("en-NG")} · {activity.createdBy?.name ?? "System"}</p></div>) : <p className="text-sm text-vodium-cream/35">No activity yet.</p>}</div>{canWrite && <ActivityForm closed={closed} busy={busy} submit={addActivity} />}</section>
+    {dialog && <AdminDialog {...dialog} onClose={() => setDialog(null)} />}
   </div>;
 }
 

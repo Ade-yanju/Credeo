@@ -13,7 +13,9 @@ export async function GET() {
     take: 50,
   });
 
-  return NextResponse.json(notifications);
+  return NextResponse.json(notifications, {
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -36,4 +38,12 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json(notification, { status: 201 });
+}
+
+export async function DELETE() {
+  const vendor = await getVendorSession();
+  if (!vendor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  await prisma.notification.deleteMany({ where: { vendorId: vendor.id } });
+  return NextResponse.json({ ok: true });
 }

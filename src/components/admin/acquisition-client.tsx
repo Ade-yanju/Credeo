@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Plus, Target, AlertTriangle, CalendarClock, Users, Search, Phone, Mail } from "lucide-react";
 import type { AcquisitionDashboardData } from "@/lib/admin/acquisition";
+import { AdminDialog } from "@/components/ui/admin-dialog";
 
 const SOURCE_LABEL: Record<string, string> = {
   GOOGLE_BUSINESS: "Google Business", SOCIAL_MEDIA: "Social media", AMBASSADOR_REFERRAL: "Ambassador/referral",
@@ -11,6 +12,7 @@ const SOURCE_LABEL: Record<string, string> = {
 };
 const STAGES = ["IDENTIFIED", "CONTACTED", "RESPONDED", "QUALIFIED", "DEMO_SCHEDULED", "DEMO_COMPLETED", "ONBOARDING", "ACTIVATED", "WON", "LOST", "UNQUALIFIED"];
 const sourceValues = Object.keys(SOURCE_LABEL);
+type ConfirmationState = { title: string; message: string; confirmLabel?: string; onConfirm: () => void | Promise<void> };
 
 export function AcquisitionClient({ data, canWrite }: { data: AcquisitionDashboardData; canWrite: boolean }) {
   const [query, setQuery] = useState("");
@@ -20,6 +22,7 @@ export function AcquisitionClient({ data, canWrite }: { data: AcquisitionDashboa
   const [showCampaignCreate, setShowCampaignCreate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ title: string; message: string; reload?: boolean } | null>(null);
+  const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null);
   const visible = useMemo(() => data.prospects.filter((p) =>
     (!stage || p.stage === stage) && (!query || [p.businessName, p.contactName, p.phone, p.email].filter(Boolean).join(" ").toLowerCase().includes(query.toLowerCase()))
   ), [data.prospects, query, stage]);
@@ -33,11 +36,21 @@ export function AcquisitionClient({ data, canWrite }: { data: AcquisitionDashboa
     const json = await res.json();
     setBusy(false);
     if (res.status === 409 && json.duplicateWarning) {
-      if (!window.confirm("A matching prospect or vendor exists. Create a separate prospect anyway?")) return;
-      body.forceCreate = true;
-      const retry = await fetch("/api/admin/acquisition/prospects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (!retry.ok) return setNotice({ title: "Could not create prospect", message: (await retry.json()).error ?? "Please review the details and try again." });
-      window.location.reload(); return;
+      setConfirmation({
+        title: "Matching prospect found",
+        message: "A matching prospect or vendor exists. Create a separate prospect anyway?",
+        confirmLabel: "Create anyway",
+        onConfirm: async () => {
+          setConfirmation(null);
+          setBusy(true);
+          body.forceCreate = true;
+          const retry = await fetch("/api/admin/acquisition/prospects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+          setBusy(false);
+          if (!retry.ok) return setNotice({ title: "Could not create prospect", message: (await retry.json()).error ?? "Please review the details and try again." });
+          window.location.reload();
+        },
+      });
+      return;
     }
     if (!res.ok) return setNotice({ title: "Could not create prospect", message: json.error ?? "Please review the details and try again." });
     window.location.reload();
@@ -116,14 +129,14 @@ export function AcquisitionClient({ data, canWrite }: { data: AcquisitionDashboa
       {showCreate && <CreateModal data={data} busy={busy} close={() => setShowCreate(false)} submit={create} />}
       {showDiscovery && <DiscoveryModal busy={busy} close={() => setShowDiscovery(false)} submit={discover} />}
       {showCampaignCreate && <CampaignModal data={data} busy={busy} close={() => setShowCampaignCreate(false)} submit={createCampaign} />}
-      {notice && <NoticeModal title={notice.title} message={notice.message} close={() => { const reload = notice.reload; setNotice(null); if (reload) window.location.reload(); }} />}
+      {notice && <AdminDialog title={notice.title} message={notice.message} onClose={() => { const reload = notice.reload; setNotice(null); if (reload) window.location.reload(); }} />}
+      {confirmation && <AdminDialog {...confirmation} onClose={() => setConfirmation(null)} />}
     </div>
   );
 }
 function DiscoveryModal({ busy, close, submit }: { busy: boolean; close: () => void; submit: (form: HTMLFormElement) => void }) {
   return <div className="fixed inset-0 z-50 bg-black/70 p-4 overflow-auto"><form onSubmit={(e) => { e.preventDefault(); submit(e.currentTarget); }} className="max-w-xl mx-auto my-8 bg-vodium-charcoal rounded-2xl border border-white/[0.1] p-6 space-y-4"><div className="flex justify-between gap-4"><div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-vodium-gold">Google Places · Nigeria</p><h2 className="font-serif text-xl">Find potential merchant customers</h2><p className="text-xs text-vodium-cream/45 mt-1">Search Google Business listings by category and location, then add unique results to the prospect pipeline.</p></div><button type="button" onClick={close} className="rounded-md px-2 py-1 text-sm text-vodium-cream/50 transition-colors hover:bg-white/5 hover:text-vodium-cream focus:outline-none focus:ring-2 focus:ring-vodium-gold/50">Close</button></div><div className="grid md:grid-cols-2 gap-3"><div className="md:col-span-2"><Field name="query" label="Business search" required /><p className="text-[11px] text-vodium-cream/35 mt-1">Examples: provision stores, restaurants, campus laundry</p></div><Field name="city" label="Nigerian city" required /><Field name="state" label="Nigerian state (optional)" /><label className="text-xs text-vodium-cream/50">Listings to look for<select name="limit" defaultValue="20" className="input-dark w-full rounded-lg px-3 py-2 mt-1"><option value="10">10</option><option value="20">20</option><option value="40">40</option><option value="60">60</option></select></label></div><p className="rounded-lg border border-vodium-gold/20 bg-vodium-gold/5 p-3 text-xs text-vodium-cream/55">Google may return a phone number, website and map link. It does not provide business emails, so add an email manually after verifying the business. Confirm public details before outreach.</p><div className="flex justify-end gap-2 border-t border-white/[0.08] pt-4"><button type="button" onClick={close} disabled={busy} className="h-10 rounded-lg px-4 text-sm font-semibold text-vodium-cream/60 transition-colors hover:bg-white/5 hover:text-vodium-cream disabled:opacity-50">Cancel</button><button disabled={busy} className="btn-gold inline-flex h-10 items-center rounded-lg px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60">{busy ? "Searching Google…" : "Find and add prospects"}</button></div></form></div>;
 }
-function NoticeModal({ title, message, close }: { title: string; message: string; close: () => void }) { return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"><div role="dialog" aria-modal="true" className="w-full max-w-md rounded-2xl border border-white/[0.12] bg-vodium-charcoal p-6 shadow-2xl"><h2 className="font-serif text-xl text-vodium-cream">{title}</h2><p className="mt-3 text-sm leading-6 text-vodium-cream/65">{message}</p><div className="mt-6 flex justify-end"><button type="button" onClick={close} className="btn-gold inline-flex h-10 items-center rounded-lg px-4 text-sm font-semibold">Done</button></div></div></div>; }
 function CampaignModal({ data, busy, close, submit }: { data: AcquisitionDashboardData; busy: boolean; close: () => void; submit: (form: HTMLFormElement) => void }) {
   return <div className="fixed inset-0 z-50 bg-black/70 p-4 overflow-auto"><form onSubmit={(e) => { e.preventDefault(); submit(e.currentTarget); }} className="max-w-xl mx-auto my-8 bg-vodium-charcoal rounded-2xl border border-white/[0.1] p-6 space-y-4"><div className="flex justify-between"><h2 className="font-serif text-xl">New acquisition campaign</h2><button type="button" onClick={close} className="text-vodium-cream/50">Close</button></div><div className="grid md:grid-cols-2 gap-3"><Field name="name" label="Campaign name" required /><Select name="source" label="Primary source" values={sourceValues} labels={SOURCE_LABEL} required /><Select name="ownerAdminId" label="Owner" values={data.admins.map((a) => a.id)} labels={Object.fromEntries(data.admins.map((a) => [a.id, a.name]))} /><Select name="status" label="Status" values={["DRAFT", "ACTIVE", "PAUSED", "COMPLETED"]} /><Field name="budgetAmount" label="Budget (₦)" type="number" /><label className="text-xs text-vodium-cream/50">Start date<input name="startAt" type="datetime-local" className="input-dark w-full rounded-lg px-3 py-2 mt-1" /></label></div><label className="text-xs text-vodium-cream/50 block">Notes<textarea name="notes" className="input-dark w-full rounded-lg px-3 py-2 mt-1 min-h-20" /></label><button disabled={busy} className="btn-gold rounded-lg px-4 py-2 text-sm">{busy ? "Saving…" : "Create campaign"}</button></form></div>;
 }

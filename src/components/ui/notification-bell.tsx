@@ -73,10 +73,10 @@ export function NotificationBell() {
 
   async function fetchNotifications() {
     try {
-      const res = await fetch("/api/notifications");
+      const res = await fetch("/api/notifications", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        setNotifications(data);
+        if (Array.isArray(data)) setNotifications(data);
       }
     } catch (err) {
       console.error("Failed to fetch notifications", err);
@@ -85,7 +85,8 @@ export function NotificationBell() {
 
   async function markAsRead(id: string) {
     try {
-      await fetch(`/api/notifications/${id}`, { method: "PATCH" });
+      const res = await fetch(`/api/notifications/${id}`, { method: "PATCH" });
+      if (!res.ok) return;
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, read: true } : n))
       );
@@ -96,10 +97,21 @@ export function NotificationBell() {
 
   async function deleteNotification(id: string) {
     try {
-      await fetch(`/api/notifications/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/notifications/${id}`, { method: "DELETE" });
+      if (!res.ok) return;
       setNotifications((prev) => prev.filter((n) => n.id !== id));
     } catch (err) {
       console.error("Failed to delete notification", err);
+    }
+  }
+
+  async function clearNotifications() {
+    try {
+      const res = await fetch("/api/notifications", { method: "DELETE" });
+      if (!res.ok) return;
+      setNotifications([]);
+    } catch (err) {
+      console.error("Failed to clear notifications", err);
     }
   }
 
@@ -120,6 +132,7 @@ export function NotificationBell() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setOpen(!open)}
+        aria-label={unreadCount > 0 ? `${unreadCount} unread notifications` : "Notifications"}
         className={`relative w-8 h-8 rounded-lg border flex items-center justify-center transition-all ${
           open
             ? "border-vodium-gold bg-vodium-gold/5 text-vodium-gold"
@@ -201,7 +214,7 @@ export function NotificationBell() {
             <div className="px-5 py-3 border-t border-white/[0.05] bg-white/[0.01]">
               <button
                 className="text-[11px] text-vodium-cream/30 hover:text-vodium-cream transition-colors w-full text-center"
-                onClick={() => setNotifications([])}
+                onClick={clearNotifications}
               >
                 Clear all notifications
               </button>

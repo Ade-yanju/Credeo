@@ -12,7 +12,6 @@ import {
   LogOut,
   Menu,
   X,
-  Bell,
   TrendingUp,
   Headphones,
   Users,
@@ -386,11 +385,6 @@ export function AdminShell({ name, role, children }: Props) {
             >
               {roleLabel}
             </span>
-            {/* Bell */}
-            <button className="relative w-8 h-8 rounded-lg border border-white/[0.07] flex items-center justify-center text-vodium-cream/35 hover:text-vodium-gold hover:border-vodium-gold/25 transition-all">
-              <Bell size={13} />
-              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-vodium-gold rounded-full shadow-[0_0_4px_rgba(201,169,97,0.5)]" />
-            </button>
             {/* Avatar */}
             <div className="w-8 h-8 rounded-full bg-vodium-gold/15 border border-vodium-gold/30 flex items-center justify-center shadow-[0_0_8px_rgba(201,169,97,0.1)]">
               <span className="text-vodium-gold text-xs font-bold">
