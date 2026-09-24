@@ -20,6 +20,7 @@ const MIN_DEFAULT_SCORE = 300;
 type LifecycleScope = {
   vendorId?: string;
   now?: Date;
+  deferDispatch?: boolean;
 };
 
 export async function markOverdueCredits(scope: LifecycleScope = {}) {
@@ -33,7 +34,7 @@ export async function markOverdueCredits(scope: LifecycleScope = {}) {
     include: {
       student: true,
     },
-    take: 500,
+    take: 25,
   });
 
   let marked = 0;
@@ -263,6 +264,7 @@ export async function sendOverdueReminders(scope: LifecycleScope & { force?: boo
         ),
         creds: creds ?? undefined,
         now,
+        dispatchImmediately: !scope.deferDispatch,
       });
 
       await prisma.credit.updateMany({
@@ -372,6 +374,7 @@ export async function sendEscalations(scope: LifecycleScope = {}) {
         dueText: "still unpaid — please settle today",
         richBody: body,
         now,
+        dispatchImmediately: !scope.deferDispatch,
       });
       await prisma.credit.update({ where: { id: credit.id }, data: { escalatedAt: now } });
       await prisma.notification.create({

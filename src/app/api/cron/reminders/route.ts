@@ -153,6 +153,7 @@ async function sendInstallmentReminders(input: {
         dueText: label,
         richBody: messages.reminderToCustomer(student.fullName, vendor.businessName, outstanding, label, payToBlock(vendor)),
         now,
+        dispatchImmediately: false,
       });
       await prisma.repaymentSchedule.update({
         where: { id: schedule.id },
@@ -206,9 +207,9 @@ async function runReminderCycle() {
   const now = new Date();
   const maxLookahead = new Date(now.getTime() + MAX_REMINDER_LOOKAHEAD_MINUTES * 60_000);
   const overdueLifecycle = await markOverdueCredits({ now });
-  const overdueReminders = await sendOverdueReminders({ now });
+  const overdueReminders = await sendOverdueReminders({ now, deferDispatch: true });
   // Firmer follow-up to anyone who ignored a reminder ≥2h ago (once per credit).
-  const escalations = await sendEscalations({ now });
+  const escalations = await sendEscalations({ now, deferDispatch: true });
 
   // Invoices follow the same stream: mark overdue, then remind.
   const overdueInvoices = await markOverdueInvoices({ now });
@@ -245,7 +246,12 @@ async function runReminderCycle() {
 
   // Merchants can turn off customer reminders — respect that (cached per org).
   const remindersAllowed = createReminderPrefResolver();
-  const installmentReminders = await sendInstallmentReminders({ now, maxLookahead, remindersAllowed });
+  let installmentReminders = { marked: 0, sent: 0, failed: 0, skipped: 0, notYetDue: 0, blocked: 0, total: 0 };
+  try {
+    installmentReminders = await sendInstallmentReminders({ now, maxLookahead, remindersAllowed });
+  } catch (err) {
+    console.error("[cron/reminders] installment phase failed", err);
+  }
   let skipped = 0;
 
   for (const credit of credits) {
@@ -307,6 +313,7 @@ async function runReminderCycle() {
           { id: `DISPUTE_${credit.id}`, title: "Not my credit" },
         ],
         now,
+        dispatchImmediately: false,
       });
 
       // Stamp the credit so we don't remind again.

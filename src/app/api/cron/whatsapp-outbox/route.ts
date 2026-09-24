@@ -10,6 +10,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await dispatchDueWhatsAppOutbox();
+  const result = await dispatchDueWhatsAppOutbox(25);
   return NextResponse.json({ ok: true, ...result, at: new Date().toISOString() });
 }

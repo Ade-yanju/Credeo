@@ -61,6 +61,7 @@ export async function sendCustomerReminder(input: {
   buttons?: WhatsAppButton[];
   creds?: { token: string; phoneId: string };
   now?: Date;
+  dispatchImmediately?: boolean;
 }): Promise<{ channel: ReminderChannel }> {
   const { phone, customerName, shopName, amountOwed, dueText, creds } = input;
 
@@ -78,8 +79,10 @@ export async function sendCustomerReminder(input: {
         languageCode: process.env.WHATSAPP_REMINDER_TEMPLATE_LANG ?? "en_US",
         bodyParams: [firstName, shopName, formatNaira(amountOwed), dueText],
       });
-      const status = await dispatchWhatsAppOutboxMessage(queued.id, { rethrowFailure: true });
-      if (status !== "SENT") throw new Error(`Reminder outbox ${status.toLowerCase()}`);
+      if (input.dispatchImmediately !== false) {
+        const status = await dispatchWhatsAppOutboxMessage(queued.id, { rethrowFailure: true });
+        if (status !== "SENT") throw new Error(`Reminder outbox ${status.toLowerCase()}`);
+      }
     } else {
       await sendWhatsAppTemplate(phone, template, [firstName, shopName, formatNaira(amountOwed), dueText], {
         creds,
