@@ -88,23 +88,40 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       },
     });
 
-    // Apply the payment across pending schedule rows, oldest first.
+    // Apply the payment across schedule rows, oldest first. Partial payments
+    // stay attached to the installment they started paying, so reminders only
+    // ask for the remaining amount.
     let remaining = amount;
+    let scheduleHasOverdue = false;
     for (const entry of order.schedules) {
-      if (remaining <= 0.5) break;
-      if (entry.status === "PAID") continue;
-      if (remaining + 0.5 >= Number(entry.amount)) {
-        await tx.repaymentSchedule.update({
-          where: { id: entry.id },
-          data: { status: "PAID", paidAt: now },
-        });
-        remaining -= Number(entry.amount);
+      if (remaining <= 0.005) {
+        if (entry.dueAt < now && entry.status !== "PAID" && Number(entry.amountPaid) < Number(entry.amount) - 0.005) scheduleHasOverdue = true;
+        continue;
       }
+      const entryOutstanding = Math.max(0, Number(entry.amount) - Number(entry.amountPaid));
+      if (entryOutstanding <= 0.005) continue;
+      const applied = Math.min(remaining, entryOutstanding);
+      const nextPaid = Number(entry.amountPaid) + applied;
+      const paid = nextPaid >= Number(entry.amount) - 0.005;
+      await tx.repaymentSchedule.update({
+        where: { id: entry.id },
+        data: {
+          amountPaid: paid ? Number(entry.amount) : nextPaid,
+          status: paid ? "PAID" : (entry.dueAt < now ? "OVERDUE" : "PENDING"),
+          ...(paid ? { paidAt: now } : {}),
+        },
+      });
+      remaining -= applied;
+      if (!paid && entry.dueAt < now) scheduleHasOverdue = true;
+    }
+
+    if (!isPaidFull && scheduleHasOverdue) {
+      await tx.credit.update({ where: { id: credit.id }, data: { status: "OVERDUE" } });
     }
 
     const updatedOrder = await tx.bnplOrder.update({
       where: { id: order.id },
-      data: { status: isPaidFull ? "PAID" : "PARTIALLY_PAID" },
+      data: { status: isPaidFull ? "PAID" : (scheduleHasOverdue ? "OVERDUE" : "PARTIALLY_PAID") },
       include: { student: true, schedules: { orderBy: { dueAt: "asc" } }, items: true },
     });
 

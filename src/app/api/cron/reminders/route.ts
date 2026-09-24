@@ -43,6 +43,140 @@ export const dynamic = "force-dynamic";
 
 const MAX_REMINDER_LOOKAHEAD_MINUTES = 7 * 1440;
 
+type ReminderPreferenceResolver = (organizationId: string | null | undefined, kind: "preDue" | "overdue") => Promise<boolean>;
+
+function installmentReminderLeadMinutes(minutesUntilDue: number): number {
+  if (minutesUntilDue <= 10) return Math.max(1, minutesUntilDue);
+  if (minutesUntilDue <= 24 * 60) return 2 * 60;
+  if (minutesUntilDue <= 3 * 1440) return 12 * 60;
+  return 24 * 60;
+}
+
+function installmentReminderIsDue(dueAt: Date, now: Date): boolean {
+  const minutesUntilDue = Math.ceil((dueAt.getTime() - now.getTime()) / 60_000);
+  return minutesUntilDue <= installmentReminderLeadMinutes(Math.max(1, minutesUntilDue));
+}
+
+function installmentDueText(dueAt: Date, now: Date): string {
+  const minutes = Math.ceil((dueAt.getTime() - now.getTime()) / 60_000);
+  if (minutes <= 0) {
+    const days = Math.max(1, Math.ceil(Math.abs(minutes) / 1440));
+    return `overdue by ${days} day${days === 1 ? "" : "s"}`;
+  }
+  if (minutes < 60) return `in ${minutes} minute${minutes === 1 ? "" : "s"}`;
+  if (minutes < 1440) {
+    const hours = Math.ceil(minutes / 60);
+    return `in ${hours} hour${hours === 1 ? "" : "s"}`;
+  }
+  const days = Math.ceil(minutes / 1440);
+  return days === 1 ? "tomorrow" : `in ${days} days`;
+}
+
+async function sendInstallmentReminders(input: {
+  now: Date;
+  maxLookahead: Date;
+  remindersAllowed: ReminderPreferenceResolver;
+}) {
+  const { now, maxLookahead, remindersAllowed } = input;
+  const marked = await prisma.repaymentSchedule.updateMany({
+    where: {
+      status: "PENDING",
+      dueAt: { lt: now },
+      order: { status: { in: ["ACTIVE", "PARTIALLY_PAID", "OVERDUE"] }, termsAcceptedAt: { not: null } },
+    },
+    data: { status: "OVERDUE" },
+  });
+
+  const schedules = await prisma.repaymentSchedule.findMany({
+    where: {
+      status: { in: ["PENDING", "OVERDUE"] },
+      dueAt: { lte: maxLookahead },
+      OR: [
+        { dueAt: { gte: now }, reminderSentAt: null },
+        { dueAt: { lt: now }, overdueReminderSentAt: null },
+      ],
+      order: {
+        status: { in: ["ACTIVE", "PARTIALLY_PAID", "OVERDUE"] },
+        termsAcceptedAt: { not: null },
+        student: { whatsappBlockedAt: null, NOT: { phone: { startsWith: "pending:" } } },
+      },
+    },
+    include: {
+      order: {
+        include: {
+          student: true,
+          vendor: { include: { subscription: true } },
+          schedules: { orderBy: { dueAt: "asc" } },
+        },
+      },
+    },
+    orderBy: { dueAt: "asc" },
+    take: 25,
+  });
+
+  let sent = 0;
+  let failed = 0;
+  let skipped = 0;
+  let notYetDue = 0;
+  let blocked = 0;
+
+  for (const schedule of schedules) {
+    const outstanding = Math.max(0, Number(schedule.amount) - Number(schedule.amountPaid));
+    if (outstanding <= 0.01) continue;
+
+    const order = schedule.order;
+    const student = order.student;
+    const vendor = order.vendor;
+    const overdue = schedule.dueAt < now;
+    if (!overdue && !installmentReminderIsDue(schedule.dueAt, now)) {
+      notYetDue++;
+      continue;
+    }
+
+    const kind = overdue ? "overdue" : "preDue";
+    if (!isPlanActive(vendor.subscription) || !(await remindersAllowed(vendor.organizationId, kind))) {
+      skipped++;
+      continue;
+    }
+
+    const number = order.schedules.findIndex((entry) => entry.id === schedule.id) + 1;
+    const dueText = installmentDueText(schedule.dueAt, now);
+    const label = `installment ${number} of ${order.schedules.length} is due ${dueText}`;
+    try {
+      await sendCustomerReminder({
+        phone: student.phone,
+        organizationId: vendor.organizationId,
+        idempotencyKey: `${overdue ? "overdue" : "pre-due"}-installment-reminder:${schedule.id}`,
+        customerName: student.fullName,
+        shopName: vendor.businessName,
+        amountOwed: outstanding,
+        dueText: label,
+        richBody: messages.reminderToCustomer(student.fullName, vendor.businessName, outstanding, label, payToBlock(vendor)),
+        now,
+      });
+      await prisma.repaymentSchedule.update({
+        where: { id: schedule.id },
+        data: overdue ? { overdueReminderSentAt: now } : { reminderSentAt: now },
+      });
+      sent++;
+    } catch (err) {
+      failed++;
+      if (err instanceof WhatsAppSendError && err.permanent) {
+        blocked++;
+        await prisma.student.update({ where: { id: student.id }, data: { whatsappBlockedAt: now } }).catch(() => {});
+        await prisma.repaymentSchedule.update({
+          where: { id: schedule.id },
+          data: overdue ? { overdueReminderSentAt: now } : { reminderSentAt: now },
+        }).catch(() => {});
+      } else {
+        console.error(`[cron/reminders] installment ${schedule.id} failed:`, err);
+      }
+    }
+  }
+
+  return { marked: marked.count, sent, failed, skipped, notYetDue, blocked, total: schedules.length };
+}
+
 export async function GET(req: NextRequest) {
   // Auth: Vercel passes Authorization: Bearer <CRON_SECRET>
   const cronSecret = process.env.CRON_SECRET;
@@ -57,6 +191,18 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  try {
+    return await runReminderCycle();
+  } catch (err) {
+    console.error("[cron/reminders] cycle failed:", err);
+    // Authentication failures still return 401/503 above. Once authenticated,
+    // return a JSON result so cron-job.org does not deactivate the job after a
+    // transient database/provider failure; the server log remains the alert.
+    return NextResponse.json({ ok: false, error: "Reminder cycle failed" }, { status: 200 });
+  }
+}
+
+async function runReminderCycle() {
   const now = new Date();
   const maxLookahead = new Date(now.getTime() + MAX_REMINDER_LOOKAHEAD_MINUTES * 60_000);
   const overdueLifecycle = await markOverdueCredits({ now });
@@ -88,6 +234,7 @@ export async function GET(req: NextRequest) {
       student: true,
       vendor:  { include: { subscription: true } },
     },
+    take: 25,
   });
 
   let sent = 0;
@@ -98,6 +245,7 @@ export async function GET(req: NextRequest) {
 
   // Merchants can turn off customer reminders — respect that (cached per org).
   const remindersAllowed = createReminderPrefResolver();
+  const installmentReminders = await sendInstallmentReminders({ now, maxLookahead, remindersAllowed });
   let skipped = 0;
 
   for (const credit of credits) {
@@ -241,6 +389,7 @@ export async function GET(req: NextRequest) {
     skipped: { preDue: skipped, overdue: overdueReminders.skipped, invoices: invoiceReminders.skipped },
     overdue: overdueLifecycle,
     invoices: { marked: overdueInvoices.marked, reminders: invoiceReminders },
+    installments: installmentReminders,
     overdueReminders: {
       sent: overdueReminders.sent,
       failed: overdueReminders.failed,

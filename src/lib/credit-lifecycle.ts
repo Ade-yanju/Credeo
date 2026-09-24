@@ -33,6 +33,7 @@ export async function markOverdueCredits(scope: LifecycleScope = {}) {
     include: {
       student: true,
     },
+    take: 500,
   });
 
   let marked = 0;
@@ -182,6 +183,7 @@ export async function sendOverdueReminders(scope: LifecycleScope & { force?: boo
     },
     include: { student: true, vendor: { include: { subscription: true } } },
     orderBy: { dueDate: "asc" },
+    take: 25,
   });
 
   let sent = 0;
@@ -339,7 +341,7 @@ export async function sendEscalations(scope: LifecycleScope = {}) {
     },
     include: { student: true, vendor: { include: { subscription: true } } },
     orderBy: { reminderSentAt: "asc" },
-    take: 200, // bound each run so a backlog can't blow the CPU/quota budget
+    take: 25, // bound each run so a backlog can't blow the CPU/quota budget
   });
 
   // Respect the merchant-level pre-due reminder switch — if they turned off

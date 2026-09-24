@@ -92,7 +92,9 @@ Vodium Ledger gives vendors a 15-second way to log a credit, reminds students au
 - Finds every outstanding credit whose adaptive reminder window is open
 - Sends WhatsApp reminders through open sessions or approved Meta templates when the customer is out of session
 - Stamps `reminderSentAt` to prevent duplicate sends
+- Sends each BNPL `RepaymentSchedule` installment reminder independently and tracks partial balances
 - Respects pending (unregistered) student phone numbers — skips them cleanly
+- The cron URL must return 2xx: configure the exact deployed `CRON_SECRET` as `Authorization: Bearer <secret>`; wrong/missing auth returns 401/503 by design
 
 ### Credit Score Engine (rule-based v1)
 - Vodium Score: 0–1000 scale, 500 baseline for new students

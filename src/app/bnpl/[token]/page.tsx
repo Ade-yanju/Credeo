@@ -81,7 +81,7 @@ export default async function BnplPublicPage({ params }: { params: { token: stri
                   <div key={s.id} className="flex justify-between text-sm text-vodium-cream/70">
                     <span>{new Date(s.dueAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}</span>
                     <span className="flex items-center gap-2">
-                      {formatNaira(Number(s.amount))}
+                      {formatNaira(Math.max(0, Number(s.amount) - Number(s.amountPaid)))}
                       <span className={s.status === "PAID" ? "text-emerald-300 text-xs" : "text-vodium-cream/40 text-xs"}>{s.status}</span>
                     </span>
                   </div>

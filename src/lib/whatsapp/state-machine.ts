@@ -14,6 +14,7 @@ import type { WhatsAppState } from "@prisma/client";
 export type Intent =
   | "START"
   | "ADD"
+  | "INSTALLMENT"
   | "INVOICE"
   | "PAID"
   | "LIST"
@@ -56,6 +57,7 @@ export interface StepResult {
 export type SideEffect =
   | { type: "CREATE_VENDOR";  data: { name: string; businessName: string; communityName: string; phone: string } }
   | { type: "CREATE_CREDIT";  data: { vendorId: string; customerName: string; customerPhone: string; amount: number; dueInMinutes: number; remindersEnabled: boolean } }
+  | { type: "CREATE_INSTALLMENT_ORDER"; data: { vendorId: string; customerName: string; customerPhone: string; amount: number; downPayment: number; installments: Array<{ dueInMinutes: number; amount: number }> } }
   | { type: "CREATE_INVOICE"; data: { vendorId: string; customerName: string; customerPhone: string; items: InvoiceItemEntry[]; dueInMinutes: number } }
   | { type: "SCORE_PREVIEW";  data: { customerName: string; customerPhone: string } }
   | { type: "VERIFY_CUSTOMER_CODE"; data: { vendorId: string; code: string } }
@@ -77,6 +79,7 @@ export function detectIntent(body: string): Intent {
   // behaviour can regress no matter what the language layer decides.
   if (t === "START" || t === "BEGIN" || t === "HI" || t === "HELLO") return "START";
   if (t === "ADD" || t === "NEW" || t === "CREDIT")                   return "ADD";
+  if (t === "INSTALLMENT" || t === "INSTALMENT" || t === "BNPL" || t === "PAY IN PARTS") return "INSTALLMENT";
   if (/^(ADD|NEW|CREDIT)\s+\S/.test(t))                              return "ADD";
   if (t === "INVOICE" || t === "BILL")                                 return "INVOICE";
   if (t.startsWith("PAID"))                                            return "PAID";
@@ -108,6 +111,11 @@ const DUE_BUTTONS: BotButton[] = [
   { id: "CANCEL", title: "Cancel" },
 ];
 
+const INSTALLMENT_CONFIRM_BUTTONS: BotButton[] = [
+  { id: "SAVE_INSTALLMENT", title: "Save plan ✓" },
+  { id: "CANCEL", title: "Cancel" },
+];
+
 const REMINDER_BUTTONS: BotButton[] = [
   { id: "REMIND",   title: "Save ✓" },
   { id: "NOREMIND", title: "Save, no reminders" },
@@ -125,6 +133,7 @@ const MENU_LIST: BotList = {
   rows: [
     { id: "ADD",       title: "Add credit",      description: "Record a new credit in 15 seconds" },
     { id: "INVOICE",   title: "New invoice",     description: "Create & send an invoice on WhatsApp" },
+    { id: "INSTALLMENT", title: "Installment plan", description: "Agree dates and amounts for goods" },
     { id: "PAID_CMD",  title: "Mark paid",       description: "Record a customer's repayment" },
     { id: "LIST",      title: "Who's owing",     description: "See all outstanding credits" },
     { id: "SCORE",     title: "Check a score",   description: "A customer's reliability score" },
@@ -206,6 +215,128 @@ export function step(session: SessionContext, msg: IncomingMessage): StepResult 
             },
           },
         ],
+      };
+    }
+
+    case "ADDING_INSTALLMENT_CUSTOMER": {
+      const name = body.replace(/^INSTALLMENT\s+/i, "").replace(/\s+/g, " ").trim();
+      if (name.length < 2 || name.length > 80 || /\d{7}/.test(name)) {
+        return { reply: messages.installmentAskCustomer(), nextState: "ADDING_INSTALLMENT_CUSTOMER", buttons: CANCEL_BUTTON };
+      }
+      return { reply: messages.installmentAskPhone(name), nextState: "ADDING_INSTALLMENT_PHONE", contextPatch: { installmentCustomerName: name }, buttons: CANCEL_BUTTON };
+    }
+
+    case "ADDING_INSTALLMENT_PHONE": {
+      if (body.replace(/\D/g, "").length < 7) {
+        return { reply: messages.invalidPhone(), nextState: "ADDING_INSTALLMENT_PHONE", buttons: CANCEL_BUTTON };
+      }
+      return {
+        reply: messages.installmentAskAmount(String(session.context.installmentCustomerName ?? "the customer")),
+        nextState: "ADDING_INSTALLMENT_AMOUNT",
+        contextPatch: { installmentCustomerPhone: body },
+        buttons: CANCEL_BUTTON,
+      };
+    }
+
+    case "ADDING_INSTALLMENT_AMOUNT": {
+      const amount = parseAmount(body);
+      if (!amount) return { reply: messages.invalidAmount(), nextState: "ADDING_INSTALLMENT_AMOUNT", buttons: CANCEL_BUTTON };
+      return {
+        reply: messages.installmentAskDownPayment(amount),
+        nextState: "ADDING_INSTALLMENT_DOWN_PAYMENT",
+        contextPatch: { installmentAmount: amount },
+        buttons: CANCEL_BUTTON,
+      };
+    }
+
+    case "ADDING_INSTALLMENT_DOWN_PAYMENT": {
+      const amount = Number(session.context.installmentAmount ?? 0);
+      const normalized = body.trim().toLowerCase();
+      const downPayment = ["0", "none", "no", "none yet"].includes(normalized) ? 0 : parseAmount(body);
+      if (downPayment === null || downPayment === undefined || downPayment < 0 || downPayment >= amount) {
+        return { reply: messages.installmentInvalidDownPayment(amount), nextState: "ADDING_INSTALLMENT_DOWN_PAYMENT", buttons: CANCEL_BUTTON };
+      }
+      return {
+        reply: messages.installmentAskCount(amount - downPayment),
+        nextState: "ADDING_INSTALLMENT_COUNT",
+        contextPatch: { installmentDownPayment: downPayment },
+        buttons: CANCEL_BUTTON,
+      };
+    }
+
+    case "ADDING_INSTALLMENT_COUNT": {
+      const count = Number(body.replace(/\D/g, ""));
+      if (!Number.isInteger(count) || count < 2 || count > 12) {
+        return { reply: messages.installmentInvalidCount(), nextState: "ADDING_INSTALLMENT_COUNT", buttons: CANCEL_BUTTON };
+      }
+      return {
+        reply: messages.installmentAskSchedule(1, count),
+        nextState: "ADDING_INSTALLMENT_SCHEDULE",
+        contextPatch: { installmentCount: count, installmentSchedule: [] },
+        buttons: CANCEL_BUTTON,
+      };
+    }
+
+    case "ADDING_INSTALLMENT_SCHEDULE": {
+      const count = Number(session.context.installmentCount ?? 0);
+      const amount = Number(session.context.installmentAmount ?? 0);
+      const downPayment = Number(session.context.installmentDownPayment ?? 0);
+      const existing = installmentEntriesFromContext(session.context);
+      const parsed = parseInstallmentEntry(body);
+      if (!parsed) {
+        return { reply: messages.installmentInvalidEntry(existing.length + 1, count), nextState: "ADDING_INSTALLMENT_SCHEDULE", buttons: CANCEL_BUTTON };
+      }
+      const base = existing.length >= count ? existing.slice(0, -1) : existing;
+      const previous = base[base.length - 1];
+      if (previous && parsed.dueInMinutes <= previous.dueInMinutes) {
+        return { reply: messages.installmentDateOrderError(), nextState: "ADDING_INSTALLMENT_SCHEDULE", buttons: CANCEL_BUTTON };
+      }
+      const updated = [...base, parsed];
+      if (updated.length < count) {
+        return {
+          reply: messages.installmentAskSchedule(updated.length + 1, count),
+          nextState: "ADDING_INSTALLMENT_SCHEDULE",
+          contextPatch: { installmentSchedule: updated },
+          buttons: CANCEL_BUTTON,
+        };
+      }
+      const scheduleTotal = updated.reduce((sum, entry) => sum + entry.amount, 0);
+      if (Math.abs(scheduleTotal - (amount - downPayment)) > 0.01) {
+        return {
+          reply: messages.installmentScheduleMismatch(amount - downPayment, scheduleTotal),
+          nextState: "ADDING_INSTALLMENT_SCHEDULE",
+          contextPatch: { installmentSchedule: updated },
+          buttons: CANCEL_BUTTON,
+        };
+      }
+      return {
+        reply: messages.installmentConfirm(String(session.context.installmentCustomerName ?? "Customer"), amount, downPayment, updated),
+        nextState: "ADDING_INSTALLMENT_CONFIRM",
+        contextPatch: { installmentSchedule: updated },
+        buttons: INSTALLMENT_CONFIRM_BUTTONS,
+      };
+    }
+
+    case "ADDING_INSTALLMENT_CONFIRM": {
+      if (upperBody !== "SAVE_INSTALLMENT" && upperBody !== "SAVE" && upperBody !== "CONFIRM" && !isAffirmative(body)) {
+        return { reply: messages.installmentConfirmHint(), nextState: "ADDING_INSTALLMENT_CONFIRM", buttons: INSTALLMENT_CONFIRM_BUTTONS };
+      }
+      const installments = installmentEntriesFromContext(session.context);
+      return {
+        reply: "Creating the installment plan…",
+        nextState: "IDLE",
+        contextPatch: clearFlowContext(),
+        sideEffects: [{
+          type: "CREATE_INSTALLMENT_ORDER",
+          data: {
+            vendorId: session.vendorId!,
+            customerName: String(session.context.installmentCustomerName ?? "Customer"),
+            customerPhone: String(session.context.installmentCustomerPhone ?? ""),
+            amount: Number(session.context.installmentAmount ?? 0),
+            downPayment: Number(session.context.installmentDownPayment ?? 0),
+            installments,
+          },
+        }],
       };
     }
 
@@ -427,6 +558,23 @@ export function step(session: SessionContext, msg: IncomingMessage): StepResult 
         return { reply: messages.alreadyRegistered(businessName), nextState: "IDLE", buttons: MAIN_BUTTONS };
       }
       return { reply: messages.onboardingAskName(), nextState: "ONBOARDING_NAME" };
+
+    case "INSTALLMENT":
+      if (!session.vendorId) return { reply: messages.noVendorAccount(), nextState: "IDLE" };
+      return {
+        reply: messages.installmentAskCustomer(),
+        nextState: "ADDING_INSTALLMENT_CUSTOMER",
+        contextPatch: {
+          ...clearFlowContext(),
+          installmentCustomerName: null,
+          installmentCustomerPhone: null,
+          installmentAmount: null,
+          installmentDownPayment: null,
+          installmentCount: null,
+          installmentSchedule: null,
+        },
+        buttons: CANCEL_BUTTON,
+      };
 
     case "ADD": {
       if (!session.vendorId) return { reply: messages.noVendorAccount(), nextState: "IDLE" };
@@ -688,6 +836,32 @@ const INVOICE_CONFIRM_BUTTONS: BotButton[] = [
   { id: "SEND",   title: "Send it ✓" },
   { id: "CANCEL", title: "Cancel" },
 ];
+
+export interface InstallmentEntry {
+  dueInMinutes: number;
+  amount: number;
+}
+
+export function parseInstallmentEntry(input: string): InstallmentEntry | null {
+  const parts = input.replace(/,/g, " ").trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return null;
+  const amount = parseAmount(parts[parts.length - 1]);
+  if (!amount) return null;
+  const dueInMinutes = parseDueDuration(parts.slice(0, -1).join(" "));
+  if (!dueInMinutes || dueInMinutes <= 0) return null;
+  return { dueInMinutes, amount };
+}
+
+function installmentEntriesFromContext(context: Record<string, unknown>): InstallmentEntry[] {
+  const raw = context.installmentSchedule;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (entry): entry is InstallmentEntry =>
+      !!entry && typeof entry === "object" &&
+      typeof (entry as InstallmentEntry).dueInMinutes === "number" &&
+      typeof (entry as InstallmentEntry).amount === "number",
+  );
+}
 
 export interface QuickCredit {
   customerName: string;
@@ -985,6 +1159,12 @@ function clearFlowContext(): Record<string, null> {
     pcAmount: null,
     pcDue: null,
     pcReminders: null,
+    installmentCustomerName: null,
+    installmentCustomerPhone: null,
+    installmentAmount: null,
+    installmentDownPayment: null,
+    installmentCount: null,
+    installmentSchedule: null,
     bankStep: null,
     bankName: null,
     bankAccountNumber: null,

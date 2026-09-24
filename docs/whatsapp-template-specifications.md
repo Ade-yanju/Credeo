@@ -134,7 +134,7 @@ Hi {{1}}, a friendly reminder from {{2}}: {{3}} is outstanding — {{4}}. Reply 
 | `{{4}}` | Due-status phrase | `due tomorrow` |
 
 The runtime order is `[firstName, shopName, amountOwed, dueText]`. The reminder
-cron uses this template for due-soon, overdue, and escalation reminders. For
+cron uses this template for due-soon, overdue, escalation, and BNPL installment reminders. For an installment, `dueText` includes its position (for example, `installment 2 of 4 is due tomorrow`). For
 organisation-backed vendors, the message is also placed in the durable outbox
 with an idempotency key before dispatch.
 

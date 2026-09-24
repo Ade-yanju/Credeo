@@ -15,6 +15,7 @@ export type BnplOrderRow = {
   totalAmount: number;
   outstanding: number;
   dueDate: string;
+  scheduleCount: number;
   canRepay: boolean;
   consentAccepted: boolean;
   consentPath: string;
@@ -22,6 +23,7 @@ export type BnplOrderRow = {
 };
 
 type ItemDraft = { name: string; quantity: number; unitPrice: number };
+type ScheduleDraft = { dueAt: string; amount: number };
 
 const OPEN_STATUSES = ["ACTIVE", "PARTIALLY_PAID", "OVERDUE"];
 
@@ -129,7 +131,7 @@ export function BnplOrdersClient({
                     </td>
                     <td className="px-5 py-3">{formatNaira(order.outstanding)}</td>
                     <td className="px-5 py-3 text-vodium-gold">{formatNaira(order.totalAmount)}</td>
-                    <td className="px-5 py-3">{new Date(order.dueDate).toLocaleDateString("en-NG")}</td>
+                    <td className="px-5 py-3">{order.scheduleCount > 1 ? `${order.scheduleCount} instalments` : new Date(order.dueDate).toLocaleDateString("en-NG")}</td>
                     <td className="px-5 py-3 text-right">
                       {canWrite && order.canRepay && OPEN_STATUSES.includes(order.status) && (
                         <button
@@ -174,6 +176,8 @@ function NewOrderForm({
   const [branchId, setBranchId] = useState(defaultBranchId ?? branches[0]?.id ?? "");
   const [dueDate, setDueDate] = useState(defaultDueDate());
   const [downPayment, setDownPayment] = useState(0);
+  const [installmentsEnabled, setInstallmentsEnabled] = useState(false);
+  const [schedule, setSchedule] = useState<ScheduleDraft[]>([]);
   const [couponCode, setCouponCode] = useState("");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<ItemDraft[]>([{ name: "", quantity: 1, unitPrice: 0 }]);
@@ -185,9 +189,27 @@ function NewOrderForm({
     () => items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
     [items]
   );
+  const financed = Math.max(0, subtotal - downPayment);
+  const scheduleTotal = schedule.reduce((sum, entry) => sum + entry.amount, 0);
+
+  function defaultSchedule(total: number): ScheduleDraft[] {
+    const first = new Date();
+    first.setDate(first.getDate() + 7);
+    const second = new Date(first);
+    second.setDate(second.getDate() + 7);
+    const firstAmount = Math.round((total / 2) * 100) / 100;
+    return [
+      { dueAt: first.toISOString().slice(0, 10), amount: firstAmount },
+      { dueAt: second.toISOString().slice(0, 10), amount: Math.round((total - firstAmount) * 100) / 100 },
+    ];
+  }
 
   function updateItem(index: number, patch: Partial<ItemDraft>) {
     setItems((current) => current.map((item, i) => (i === index ? { ...item, ...patch } : item)));
+  }
+
+  function updateSchedule(index: number, patch: Partial<ScheduleDraft>) {
+    setSchedule((current) => current.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
   }
 
   async function submit() {
@@ -199,6 +221,13 @@ function NewOrderForm({
     if (!customerName.trim() || !customerPhone.trim()) return setError("Enter the customer's name and phone.");
     if (!branchId) return setError("Select a branch.");
     if (!consent) return setError("Confirm the customer accepted the BNPL terms.");
+    if (installmentsEnabled) {
+      if (schedule.length < 2) return setError("Add at least two instalments, or turn instalments off.");
+      if (schedule.some((entry) => !entry.dueAt || entry.amount <= 0)) return setError("Every instalment needs a date and amount.");
+      if (Math.abs(scheduleTotal - financed) > 0.01) {
+        return setError(`Instalments must add up to ${formatNaira(financed)}.`);
+      }
+    }
 
     setSaving(true);
     const res = await fetch("/api/bnpl/orders", {
@@ -208,8 +237,11 @@ function NewOrderForm({
         branchId,
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
-        dueDate: new Date(dueDate).toISOString(),
+        dueDate: new Date(installmentsEnabled ? schedule[schedule.length - 1].dueAt : dueDate).toISOString(),
         downPayment,
+        repaymentSchedule: installmentsEnabled
+          ? schedule.map((entry) => ({ dueAt: new Date(entry.dueAt).toISOString(), amount: entry.amount }))
+          : undefined,
         couponCode: couponCode.trim() || undefined,
         notes: notes.trim() || undefined,
         items: cleanItems,
@@ -251,6 +283,47 @@ function NewOrderForm({
         <Field label="Down payment (₦)">
           <input type="number" min={0} value={downPayment} onChange={(e) => setDownPayment(Number(e.target.value))} className={inputClass} />
         </Field>
+      </div>
+
+      <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm text-vodium-cream">Installment plan</p>
+            <p className="text-xs text-vodium-cream/40">Choose how many payments and the exact dates and amounts.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const enabled = !installmentsEnabled;
+              setInstallmentsEnabled(enabled);
+              if (enabled && schedule.length === 0) setSchedule(defaultSchedule(financed));
+            }}
+            className={`px-3 py-1.5 rounded-lg text-xs border ${installmentsEnabled ? "border-vodium-gold text-vodium-gold bg-vodium-gold/10" : "border-white/10 text-vodium-cream/50"}`}
+          >
+            {installmentsEnabled ? "Enabled" : "Use instalments"}
+          </button>
+        </div>
+        {installmentsEnabled && (
+          <div className="space-y-2">
+            {schedule.map((entry, index) => (
+              <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
+                <Field label={`Payment ${index + 1} date`}>
+                  <input type="date" value={entry.dueAt} onChange={(e) => updateSchedule(index, { dueAt: e.target.value })} className={inputClass} />
+                </Field>
+                <Field label="Amount (₦)">
+                  <input type="number" min={0} step="0.01" value={entry.amount} onChange={(e) => updateSchedule(index, { amount: Number(e.target.value) })} className={inputClass} />
+                </Field>
+                <button type="button" onClick={() => setSchedule((current) => current.filter((_, i) => i !== index))} disabled={schedule.length <= 2} className="h-9 px-2 text-vodium-cream/40 hover:text-rose-300 disabled:opacity-30">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+            <div className="flex items-center justify-between text-xs">
+              <button type="button" onClick={() => { const last = schedule[schedule.length - 1]; const next = new Date(last?.dueAt || new Date().toISOString().slice(0, 10)); next.setDate(next.getDate() + 7); setSchedule((current) => [...current, { dueAt: next.toISOString().slice(0, 10), amount: 0 }]); }} className="text-vodium-gold hover:underline inline-flex items-center gap-1"><Plus size={12} /> Add payment</button>
+              <span className={Math.abs(scheduleTotal - financed) <= 0.01 ? "text-emerald-300" : "text-amber-200"}>Total {formatNaira(scheduleTotal)} / {formatNaira(financed)}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">

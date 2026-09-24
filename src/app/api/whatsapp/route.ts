@@ -18,8 +18,8 @@ import { getRedis } from "../../../lib/redis";
 import { computeScore } from "../../../lib/credit-score/score";
 import { nextVendorCustomerId } from "../../../lib/customer-id";
 import { formatNaira, normalisePhone } from "../../../lib/utils";
-import { getOrCreateCustomerForVendor, roundMoney } from "../../../lib/bnpl";
-import { signInvoiceToken } from "../../../lib/bnpl-token";
+import { getOrCreateCustomerForVendor, nextOrderNumber, roundMoney } from "../../../lib/bnpl";
+import { signInvoiceToken, signOrderToken } from "../../../lib/bnpl-token";
 import { messages } from "../../../lib/whatsapp/messages";
 import { sendTypingIndicator, sendWhatsAppButtons, sendWhatsAppList, sendWhatsAppMessage, type WhatsAppButton } from "../../../lib/whatsapp/outbound";
 import { sendCustomerInvoice } from "../../../lib/whatsapp/invoice-delivery";
@@ -1129,6 +1129,125 @@ async function runSideEffect(
       return {
         replyOverride: messages.addCreditAskAmountWithScore(effect.data.customerName, preview.warning),
         buttonsOverride: [{ id: "CANCEL", title: "Cancel" }],
+      };
+    }
+
+    case "CREATE_INSTALLMENT_ORDER": {
+      if (!vendorId) return { replyOverride: messages.noVendorAccount() };
+      const { customerName, customerPhone, amount, downPayment, installments } = effect.data;
+      let vendor = await prisma.vendor.findUnique({ where: { id: vendorId }, include: { organization: true } });
+      if (!vendor) return {};
+      if (!vendor.organizationId || !vendor.organization) {
+        await createSoloOrganizationForVendor(vendor);
+        vendor = await prisma.vendor.findUnique({ where: { id: vendorId }, include: { organization: true } });
+      }
+      if (!vendor?.organizationId || !vendor.organization) {
+        return { replyOverride: "I couldn't set up installment orders. Reply SUPPORT.", buttonsOverride: [{ id: "INSTALLMENT", title: "Try again" }] as WhatsAppButton[] };
+      }
+      const normalCustomerPhone = normalisePhone(customerPhone);
+      if (!normalCustomerPhone || normalCustomerPhone === fromPhone) {
+        return { replyOverride: "Send a valid customer WhatsApp number, not your own.", buttonsOverride: [{ id: "INSTALLMENT", title: "Try again" }] as WhatsAppButton[] };
+      }
+      const financed = roundMoney(amount - downPayment);
+      const schedule = installments.map((entry) => ({
+        dueAt: new Date(Date.now() + entry.dueInMinutes * 60_000),
+        amount: roundMoney(entry.amount),
+      }));
+      const scheduleTotal = roundMoney(schedule.reduce((sum, entry) => sum + entry.amount, 0));
+      if (financed <= 0 || schedule.length < 2 || Math.abs(scheduleTotal - financed) > 0.01) {
+        return { replyOverride: "The installment amounts must equal the balance after the upfront payment. Reply INSTALLMENT to start again.", buttonsOverride: [{ id: "INSTALLMENT", title: "Try again" }] as WhatsAppButton[] };
+      }
+      let customer;
+      try {
+        customer = await getOrCreateCustomerForVendor({
+          vendorId,
+          vendorBusinessName: vendor.businessName,
+          communityId: vendor.communityId,
+          organizationId: vendor.organizationId,
+          fullName: customerName,
+          phone: normalCustomerPhone,
+          actingVendorPhone: vendor.phone,
+        });
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "I couldn't save that customer.";
+        return { replyOverride: "Error: " + errorMessage + "\n\nReply INSTALLMENT to try again.", buttonsOverride: [{ id: "INSTALLMENT", title: "Try again" }] as WhatsAppButton[] };
+      }
+      const orderNumber = nextOrderNumber(vendor.organization.slug.slice(0, 4).toUpperCase());
+      const dueDate = schedule[schedule.length - 1].dueAt;
+      const order = await prisma.$transaction(async (tx) => {
+        const credit = await tx.credit.create({
+          data: {
+            vendorId,
+            organizationId: vendor.organizationId,
+            branchId: vendor.branchId,
+            studentId: customer.id,
+            amount,
+            amountRepaid: downPayment,
+            description: "Goods purchase - installment plan",
+            dueDate,
+            status: downPayment > 0 ? "PARTIALLY_PAID" : "OUTSTANDING",
+          },
+        });
+        const saved = await tx.bnplOrder.create({
+          data: {
+            organizationId: vendor.organizationId,
+            branchId: vendor.branchId,
+            vendorId,
+            studentId: customer.id,
+            creditId: credit.id,
+            orderNumber,
+            status: "ACTIVE",
+            subtotal: amount,
+            totalAmount: amount,
+            downPayment,
+            dueDate,
+            termsAcceptedAt: null,
+            items: { create: [{ name: "Goods purchase", quantity: 1, unitPrice: amount, totalPrice: amount }] },
+            schedules: { create: schedule.map((entry) => ({ dueAt: entry.dueAt, amount: entry.amount })) },
+          },
+        });
+        await tx.creditScoreEvent.create({
+          data: { studentId: customer.id, vendorId, creditId: credit.id, eventType: "CREDIT_EXTENDED", amount: financed, scoreDelta: 0 },
+        });
+        await tx.walletLedgerEntry.create({
+          data: {
+            organizationId: vendor.organizationId,
+            branchId: vendor.branchId,
+            vendorId,
+            entryType: "BNPL_ISSUED",
+            direction: "DEBIT",
+            amount: financed,
+            sourceType: "BnplOrder",
+            sourceId: saved.id,
+            description: "Installment plan for " + customer.fullName,
+          },
+        });
+        return saved;
+      });
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://vodiumledger.com";
+      const link = appUrl + "/bnpl/" + signOrderToken(order.id);
+      try {
+        const customerCreds = await getOrgChannelCredentials(vendor.organizationId);
+        await sendWhatsAppMessage(
+          customer.phone,
+          "Hi " + customer.fullName + "! " + vendor.organization.name + " created a goods payment plan for " +
+            formatNaira(amount) + ". Review and accept the dates and terms here: " + link,
+          customerCreds ?? undefined,
+        );
+      } catch (err) {
+        console.warn("[whatsapp] installment consent link delivery failed:", err);
+      }
+      await writeAudit({
+        actorType: "vendor",
+        actorId: vendorId,
+        action: "bnpl.order_created",
+        entityType: "BnplOrder",
+        entityId: order.id,
+        metadata: { organizationId: vendor.organizationId, orderNumber, source: "WHATSAPP", scheduleCount: schedule.length },
+      });
+      return {
+        replyOverride: messages.installmentCreated(customer.fullName, orderNumber, link),
+        buttonsOverride: ADD_AGAIN_BUTTONS,
       };
     }
 

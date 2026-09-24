@@ -16,7 +16,7 @@ export default async function BnplOrdersPage() {
   const orders = ctx.organizationId
     ? await prisma.bnplOrder.findMany({
         where,
-        include: { branch: true, student: true, credit: true },
+        include: { branch: true, student: true, credit: true, schedules: true },
         orderBy: { createdAt: "desc" },
         take: 100,
       })
@@ -35,6 +35,7 @@ export default async function BnplOrdersPage() {
       totalAmount: Number(order.totalAmount),
       outstanding: Math.max(0, outstanding),
       dueDate: order.dueDate.toISOString(),
+      scheduleCount: order.schedules.length,
       canRepay: Boolean(order.creditId) && outstanding > 0,
       consentAccepted: Boolean(order.termsAcceptedAt),
       consentPath: `/bnpl/${signOrderToken(order.id)}`,

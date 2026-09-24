@@ -62,7 +62,7 @@ export async function sendOverdueInvoiceReminders(scope: Scope = {}) {
       },
     },
     orderBy: { dueDate: "asc" },
-    take: 500,
+    take: 25,
   });
 
   const remindersAllowed = createReminderPrefResolver();

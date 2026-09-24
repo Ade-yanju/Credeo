@@ -121,20 +121,25 @@ export async function POST(req: NextRequest) {
 
     const totalAmount = Math.max(0, subtotal - discount);
     const amountFinanced = Math.max(0, totalAmount - data.downPayment);
-    const dueDate = new Date(data.dueDate);
     const orderNumber = nextOrderNumber(ctx.organization.slug.slice(0, 4).toUpperCase());
     const schedule = data.repaymentSchedule?.length
-      ? data.repaymentSchedule
+      ? [...data.repaymentSchedule].sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())
       : amountFinanced > 0
         ? [{ dueAt: data.dueDate, amount: amountFinanced }]
         : [];
-    const scheduleTotal = schedule.reduce((sum, entry) => sum + entry.amount, 0);
-    if (Math.round(scheduleTotal) !== Math.round(amountFinanced)) {
+    const scheduleTotalCents = schedule.reduce((sum, entry) => sum + Math.round(entry.amount * 100), 0);
+    const financedCents = Math.round(amountFinanced * 100);
+    const now = new Date();
+    if (schedule.some((entry) => !Number.isFinite(entry.amount) || new Date(entry.dueAt) <= now)) {
+      return NextResponse.json({ error: "Every instalment date must be in the future." }, { status: 400 });
+    }
+    if (scheduleTotalCents !== financedCents) {
       return NextResponse.json(
         { error: "Repayment schedule total must equal the financed amount." },
         { status: 400 }
       );
     }
+    const dueDate = schedule.length ? new Date(schedule[schedule.length - 1].dueAt) : new Date(data.dueDate);
 
     const order = await prisma.$transaction(async (tx) => {
       const credit = amountFinanced > 0

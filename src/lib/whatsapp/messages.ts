@@ -146,6 +146,55 @@ export const messages = {
     `${reminderText}\n\n` +
     `Reply *ADD* for another, or *LIST* to see everyone who owes you.`,
 
+  // ── Installment / BNPL flow ──────────────────────────────────────────
+  installmentAskCustomer: () =>
+    `Who is buying the goods? Send the customer's full name.\n\nExample: *Chidi Okeke*`,
+
+  installmentAskPhone: (customerName: string) =>
+    `What is *${customerName}'s* WhatsApp number?\n\nExample: *08012345678*`,
+
+  installmentAskAmount: (customerName: string) =>
+    `What is the total price of the goods for *${customerName}*? Send the amount.\n\nExample: *120000*`,
+
+  installmentAskDownPayment: (amount: number) =>
+    `The total is *${formatNaira(amount)}*. How much will they pay upfront?\n\nReply *0* if there is no down payment.`,
+
+  installmentInvalidDownPayment: (amount: number) =>
+    `The upfront payment must be less than ${formatNaira(amount)}. Reply with an amount or *0*.`,
+
+  installmentAskCount: (financed: number) =>
+    `The remaining balance is *${formatNaira(financed)}*. How many instalments?\n\nChoose a number from *2* to *12*.`,
+
+  installmentInvalidCount: () => `Please send a whole number from *2* to *12*.`,
+
+  installmentAskSchedule: (number: number, count: number) =>
+    `Payment *${number} of ${count}*: send the due date and amount, for example *7d 40000* or *15-10-2026 40000*.`,
+
+  installmentInvalidEntry: (number: number, count: number) =>
+    `I couldn't read payment ${number} of ${count}. Send it like *7d 40000* or *15-10-2026 40000*.`,
+
+  installmentDateOrderError: () => `Each payment date must be later than the previous one. Send the date and amount again.`,
+
+  installmentScheduleMismatch: (expected: number, received: number) =>
+    `The instalments total ${formatNaira(received)}, but the balance to schedule is ${formatNaira(expected)}. Send the last payment again with the corrected amount.`,
+
+  installmentConfirm: (customerName: string, amount: number, downPayment: number, entries: Array<{ dueInMinutes: number; amount: number }>) =>
+    `Review this goods payment plan for *${customerName}*:\n\n` +
+    `Total: *${formatNaira(amount)}*\n` +
+    `Upfront: *${formatNaira(downPayment)}*\n` +
+    entries.map((entry, index) => {
+      const date = new Date(Date.now() + entry.dueInMinutes * 60_000).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });
+      return `${index + 1}. ${date} — ${formatNaira(entry.amount)}`;
+    }).join("\n") +
+    `\n\nTap *Save plan* to record it. I'll send a signed link for the customer to review and accept.`,
+
+  installmentConfirmHint: () => `Tap *Save plan* to record this plan, or *Cancel* to discard it.`,
+
+  installmentCreated: (customerName: string, orderNumber: string, link: string) =>
+    `✅ Instalment plan *${orderNumber}* saved for *${customerName}*.\n\n` +
+    `Customer agreement link:\n${link}\n\n` +
+    `Share this link with the customer so they can review the goods, dates and amounts and accept the terms. Each payment will receive its own WhatsApp reminder.`,
+
   invalidAmount: () =>
     `That doesn't look like a valid amount. Please send just the number.\n\nExample: *2500*`,
 
@@ -568,6 +617,7 @@ export const messages = {
     `*Vodium Ledger commands:*\n\n` +
     `• *ADD Chidi 08012345678 2500 7d* : log a credit in one message\n` +
     `• *ADD* : record a credit step by step\n` +
+    `• *INSTALLMENT* : create a goods payment plan\n` +
     `• *INVOICE* : create & send an invoice\n` +
     `• *PAID [name]* : mark a credit paid\n` +
     `• *LIST* : see who owes you\n` +

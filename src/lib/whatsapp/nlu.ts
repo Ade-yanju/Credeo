@@ -18,7 +18,7 @@
  */
 
 export type NluIntent =
-  | "START" | "ADD" | "INVOICE" | "PAID" | "LIST" | "SCORE"
+  | "START" | "ADD" | "INSTALLMENT" | "INVOICE" | "PAID" | "LIST" | "SCORE"
   | "HELP" | "DASHBOARD" | "SUPPORT" | "BANK" | "FREE_TEXT";
 
 /** Lowercase, strip emoji/punctuation/accents, collapse whitespace. */
@@ -97,6 +97,12 @@ const VOCAB: Array<{
   phrases: string[];
   words: string[];
 }> = [
+  {
+    intent: "INSTALLMENT",
+    exact: ["installment", "instalment", "bnpl"],
+    phrases: ["installment plan", "instalment plan", "pay in parts", "buy now pay later", "pay later"],
+    words: ["installment", "instalment", "bnpl"],
+  },
   {
     intent: "ADD",
     exact: ["add", "new", "credit"],

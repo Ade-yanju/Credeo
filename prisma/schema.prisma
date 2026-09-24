@@ -610,8 +610,11 @@ model RepaymentSchedule {
   order       BnplOrder @relation(fields: [orderId], references: [id])
   dueAt       DateTime
   amount      Decimal  @db.Decimal(12, 2)
+  amountPaid  Decimal  @default(0) @db.Decimal(12, 2)
   status      RepaymentScheduleStatus @default(PENDING)
   paidAt      DateTime?
+  reminderSentAt        DateTime?
+  overdueReminderSentAt DateTime?
   providerReference String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -619,6 +622,8 @@ model RepaymentSchedule {
   @@index([orderId])
   @@index([status])
   @@index([dueAt])
+  @@index([reminderSentAt])
+  @@index([overdueReminderSentAt])
 }
 
 enum RepaymentScheduleStatus {
@@ -988,6 +993,13 @@ enum WhatsAppState {
   ADDING_CREDIT_AMOUNT
   ADDING_CREDIT_DUE
   ADDING_CREDIT_REMINDER
+  ADDING_INSTALLMENT_CUSTOMER
+  ADDING_INSTALLMENT_PHONE
+  ADDING_INSTALLMENT_AMOUNT
+  ADDING_INSTALLMENT_DOWN_PAYMENT
+  ADDING_INSTALLMENT_COUNT
+  ADDING_INSTALLMENT_SCHEDULE
+  ADDING_INSTALLMENT_CONFIRM
   VERIFYING_CUSTOMER
   MARKING_PAID
   LOOKING_UP_SCORE
