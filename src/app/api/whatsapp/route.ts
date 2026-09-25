@@ -1192,7 +1192,7 @@ async function runSideEffect(
         });
         const saved = await tx.bnplOrder.create({
           data: {
-            organizationId: vendor.organizationId,
+            organizationId: vendor.organizationId ?? undefined,
             branchId: vendor.branchId,
             vendorId,
             studentId: customer.id,
@@ -1213,7 +1213,7 @@ async function runSideEffect(
         });
         await tx.walletLedgerEntry.create({
           data: {
-            organizationId: vendor.organizationId,
+            organizationId: vendor.organizationId ?? undefined,
             branchId: vendor.branchId,
             vendorId,
             entryType: "BNPL_ISSUED",
