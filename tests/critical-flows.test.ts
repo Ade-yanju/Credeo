@@ -385,17 +385,17 @@ test("every reminder sender skips and records unreachable numbers", () => {
   const lifecycle = readFileSync("src/lib/credit-lifecycle.ts", "utf8");
   const preDue = readFileSync("src/app/api/cron/reminders/route.ts", "utf8");
 
-  // Both senders in credit-lifecycle (overdue + escalation) plus the pre-due
-  // route filter blocked customers out of their query.
+  // Both lifecycle senders plus the web/WhatsApp pre-due and installment
+  // senders must filter permanently unreachable customers.
   const filters = lifecycle.match(/whatsappBlockedAt:\s*null/g) ?? [];
   assert.equal(filters.length, 2, "overdue AND escalation must filter blocked customers");
-  assert.match(preDue, /whatsappBlockedAt:\s*null/, "pre-due reminders must filter blocked customers");
+  assert.equal((preDue.match(/whatsappBlockedAt:\s*null/g) ?? []).length, 2, "pre-due AND installment reminders must filter blocked customers");
 
   // ...and each records a newly-discovered permanent failure so it is skipped
-  // next run. Three senders, three writes.
+  // next run. Four senders, four writes.
   const writes = (lifecycle.match(/whatsappBlockedAt:\s*now/g) ?? []).length
     + (preDue.match(/whatsappBlockedAt:\s*now/g) ?? []).length;
-  assert.equal(writes, 3, "each reminder sender must record permanent failures");
+  assert.equal(writes, 4, "each reminder sender must record permanent failures");
 
   // The permanent-failure branch is what drives it — a plain catch that only
   // counts failures would satisfy the checks above but still retry forever.
