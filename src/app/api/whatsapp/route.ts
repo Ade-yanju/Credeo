@@ -1146,6 +1146,8 @@ async function runSideEffect(
       if (!vendor?.organizationId || !vendor.organization) {
         return { replyOverride: "I couldn't set up installment orders. Reply SUPPORT.", buttonsOverride: [{ id: "INSTALLMENT", title: "Try again" }] as WhatsAppButton[] };
       }
+      const organizationId = vendor.organizationId;
+      const organization = vendor.organization;
       const normalCustomerPhone = normalisePhone(customerPhone);
       if (!normalCustomerPhone || normalCustomerPhone === fromPhone) {
         return { replyOverride: "Send a valid customer WhatsApp number, not your own.", buttonsOverride: [{ id: "INSTALLMENT", title: "Try again" }] as WhatsAppButton[] };
@@ -1165,7 +1167,7 @@ async function runSideEffect(
           vendorId,
           vendorBusinessName: vendor.businessName,
           communityId: vendor.communityId,
-          organizationId: vendor.organizationId,
+          organizationId,
           fullName: customerName,
           phone: normalCustomerPhone,
           actingVendorPhone: vendor.phone,
@@ -1174,13 +1176,13 @@ async function runSideEffect(
         const errorMessage = err instanceof Error ? err.message : "I couldn't save that customer.";
         return { replyOverride: "Error: " + errorMessage + "\n\nReply INSTALLMENT to try again.", buttonsOverride: [{ id: "INSTALLMENT", title: "Try again" }] as WhatsAppButton[] };
       }
-      const orderNumber = nextOrderNumber(vendor.organization.slug.slice(0, 4).toUpperCase());
+      const orderNumber = nextOrderNumber(organization.slug.slice(0, 4).toUpperCase());
       const dueDate = schedule[schedule.length - 1].dueAt;
       const order = await prisma.$transaction(async (tx) => {
         const credit = await tx.credit.create({
           data: {
             vendorId,
-            organizationId: vendor.organizationId,
+            organizationId,
             branchId: vendor.branchId,
             studentId: customer.id,
             amount,
@@ -1192,7 +1194,7 @@ async function runSideEffect(
         });
         const saved = await tx.bnplOrder.create({
           data: {
-            organizationId: vendor.organizationId ?? undefined,
+            organizationId,
             branchId: vendor.branchId,
             vendorId,
             studentId: customer.id,
@@ -1213,7 +1215,7 @@ async function runSideEffect(
         });
         await tx.walletLedgerEntry.create({
           data: {
-            organizationId: vendor.organizationId ?? undefined,
+            organizationId,
             branchId: vendor.branchId,
             vendorId,
             entryType: "BNPL_ISSUED",
@@ -1229,10 +1231,10 @@ async function runSideEffect(
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://vodiumledger.com";
       const link = appUrl + "/bnpl/" + signOrderToken(order.id);
       try {
-        const customerCreds = await getOrgChannelCredentials(vendor.organizationId);
+        const customerCreds = await getOrgChannelCredentials(organizationId);
         await sendWhatsAppMessage(
           customer.phone,
-          "Hi " + customer.fullName + "! " + vendor.organization.name + " created a goods payment plan for " +
+          "Hi " + customer.fullName + "! " + organization.name + " created a goods payment plan for " +
             formatNaira(amount) + ". Review and accept the dates and terms here: " + link,
           customerCreds ?? undefined,
         );
@@ -1245,7 +1247,7 @@ async function runSideEffect(
         action: "bnpl.order_created",
         entityType: "BnplOrder",
         entityId: order.id,
-        metadata: { organizationId: vendor.organizationId, orderNumber, source: "WHATSAPP", scheduleCount: schedule.length },
+        metadata: { organizationId, orderNumber, source: "WHATSAPP", scheduleCount: schedule.length },
       });
       return {
         replyOverride: messages.installmentCreated(customer.fullName, orderNumber, link),
