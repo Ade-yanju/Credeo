@@ -204,7 +204,9 @@ export async function POST(req: NextRequest) {
   const change  = payload.entry?.[0]?.changes?.[0];
   const value   = change?.value;
   const message = value?.messages?.[0];
-  const phoneNumberId = value?.metadata?.phone_number_id;
+  // Meta may omit nullable metadata fields; normalize null to undefined for
+  // the internal helpers, which use optional string parameters.
+  const phoneNumberId = value?.metadata?.phone_number_id ?? undefined;
 
   if (value?.statuses?.length) {
     logDeliveryStatuses(value.statuses, phoneNumberId);
@@ -270,7 +272,7 @@ export async function POST(req: NextRequest) {
       phone: fromPhone,
       phoneNumberId,
       messageType: message.type,
-      body: rawText,
+      body: rawText ?? undefined,
     });
     if (!claimed) {
       console.log(`[whatsapp] durable duplicate ${message.id} ignored`);
